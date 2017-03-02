@@ -8,7 +8,7 @@ using namespace RooFit ;
 
 void FitLYSOPlusSig()
 {
-  RooRealVar E("E", "Energy", 0, 1000);
+  RooRealVar E("E", "Energy", 0, 1200);
   E.setBins(100);
   
   TFile* f = new TFile("data/run63.root");
@@ -27,7 +27,7 @@ void FitLYSOPlusSig()
   
   RooRealVar sig_peak_mean("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
   RooRealVar sig_peak_sigma("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
-  RooGaussian sig_gaussian("gaussian", "gaussian for signal peak", E, sig_peak_mean, sig_peak_sigma);
+  RooGaussian sig_gaussian("sig_gaussian", "gaussian for signal peak", E, sig_peak_mean, sig_peak_sigma);
   RooRealVar sig_yield("sig_yield", "yield signal peak", 1000, 0, 1000000);
   
   RooArgList shapes;
@@ -42,7 +42,10 @@ void FitLYSOPlusSig()
   RooPlot* frame = E.frame(Bins(100)) ;
   data->plotOn(frame) ;
   totalPdf.plotOn(frame);
+  totalPdf.plotOn(frame, Components("sig_gaussian"),LineColor(kRed));
+  totalPdf.plotOn(frame, Components("histpdf_LYSO"),LineColor(kGreen+2));
   //histpdf_LYSO->plotOn(frame);
   frame->Draw();
+  PutText(0.65, 0.85, kBlack, "Na22 (16 kBq)");
 
 }
