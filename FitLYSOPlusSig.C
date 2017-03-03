@@ -47,7 +47,10 @@ void FitLYSOPlusSig()
   totalPdf.plotOn(frame, Components("histpdf_LYSO"),LineColor(kGreen+2));
   //histpdf_LYSO->plotOn(frame);
   frame->Draw();
-  PutText(0.65, 0.85, kBlack, "Na22 (16 kBq)");
+  double yShift = 0.07;
+  PutText(0.7, 0.85, kBlack, "LAPD");
+  PutText(0.7, 0.85-yShift, kBlack, "LPC");
+  PutText(0.7, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
   
   E.setRange("signal_window", 420, 600) ;
   
