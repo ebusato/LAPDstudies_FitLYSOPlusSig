@@ -52,15 +52,17 @@ void FitLYSOPlusSig(string dataFile, string lysoFile)
   RooAddPdf totalPdf("totalPdf", "sum of signal and background PDF's", shapes, yields);
 
   totalPdf.fitTo(*hist, Extended());
-  
   // Plot unbinned data and histogram pdf overlaid
   RooPlot* frame = E.frame(Bins(100)) ;
-  hist->plotOn(frame) ;
+  hist->plotOn(frame, DrawOption("PX")) ;
   totalPdf.plotOn(frame);
   totalPdf.plotOn(frame, Components("sig_gaussian"),LineColor(kRed));
   totalPdf.plotOn(frame, Components("histpdf_LYSO"),LineColor(kGreen+2));
   //histpdf_LYSO->plotOn(frame);
   frame->Draw();
+  
+ // TH1* hh_1d = (TH1*) totalPdf->createHistogram("mean,sigma_g2,frac",25,25,25);
+  
   double yShift = 0.07;
   PutText(0.7, 0.85, kBlack, "LAPD");
   PutText(0.7, 0.85-yShift, kBlack, "LPC");
