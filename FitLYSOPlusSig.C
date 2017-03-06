@@ -6,23 +6,37 @@
 using namespace RooFit ;
 
 
-void FitLYSOPlusSig()
+RooDataHist* GetDataHistFromTH1(TTree* t, RooRealVar& var, string TH1Name, string histName)
+{
+  //RooDataSet* data = new RooDataSet("data", "data", t, var);
+  //RooDataHist* hist = data->binnedClone();
+  //return hist
+	
+  TH1* h = new TH1F(TH1Name.c_str(), TH1Name.c_str(), 200, 0, 1200);
+  TString s("E>>");
+  s += TH1Name.c_str();
+  t->Draw(s.Data());
+  return new RooDataHist(histName.c_str(), histName.c_str(), var, Import(*h)) ;
+}
+
+void FitLYSOPlusSig(string dataFile, string lysoFile)
 {
   RooRealVar E("E", "Energy", 0, 1200, "keV");
   E.setBins(100);
   
-  TFile* f = new TFile("data/run63.root");
+  TFile* f = new TFile(dataFile.c_str());
   TTree* t = (TTree*) f->Get("tree");
-  RooDataSet* data = new RooDataSet("data", "data_LYSOPlusSig", t, E);
-  RooDataHist* hist = data->binnedClone();
-
-  int noEntries = data->sumEntries();
-  cout << "no entries in dataset = " << noEntries << endl;
+  int noEntries = t->GetEntries();
   
-  TFile* f_LYSO = new TFile("data/run78.root");
+  TFile* f_LYSO = new TFile(lysoFile.c_str());
   TTree* t_LYSO = (TTree*) f_LYSO->Get("tree");
-  RooDataSet* data_LYSO = new RooDataSet("data_LYSO", "data_LYSO", t_LYSO, E);
-  RooDataHist* hist_LYSO = data_LYSO->binnedClone();
+  
+
+  RooDataHist* hist = GetDataHistFromTH1(t, E, "hE_data", "hist_data");
+  cout << "no entries in RooDataHist data = " << hist->sum(false) << endl;
+ 
+  RooDataHist* hist_LYSO = GetDataHistFromTH1(t_LYSO, E, "hE_lyso", "hist_lyso");
+  cout << "no entries in RooDataHist LYSO = " << hist_LYSO->sum(false) << endl;
   RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO",E,*hist_LYSO,0);
   RooRealVar lyso_yield("lyso_yield", "yield of lyso", 100, 0, 1000000);
   
@@ -37,11 +51,11 @@ void FitLYSOPlusSig()
   shapes.add(sig_gaussian);  yields.add(sig_yield);
   RooAddPdf totalPdf("totalPdf", "sum of signal and background PDF's", shapes, yields);
 
-  totalPdf.fitTo(*data, Extended());
+  totalPdf.fitTo(*hist, Extended());
   
   // Plot unbinned data and histogram pdf overlaid
   RooPlot* frame = E.frame(Bins(100)) ;
-  data->plotOn(frame) ;
+  hist->plotOn(frame) ;
   totalPdf.plotOn(frame);
   totalPdf.plotOn(frame, Components("sig_gaussian"),LineColor(kRed));
   totalPdf.plotOn(frame, Components("histpdf_LYSO"),LineColor(kGreen+2));
@@ -90,4 +104,9 @@ void FitLYSOPlusSig()
   cout << "N1prime = " << N1prime << endl;
   cout << "N2prime = " << N2prime << endl;
   cout << "s/sqrt(b) = "<< N2prime/sqrt(N1prime) << endl;
+}
+
+void FitLYSOPlusSig()
+{
+  FitLYSOPlusSig("data/run63.root", "data/run78.root");
 }
