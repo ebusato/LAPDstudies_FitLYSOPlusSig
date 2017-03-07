@@ -24,7 +24,7 @@ RooAddPdf* MakeModel(RooRealVar* E, TTree* t_LYSO)
   RooDataHist* hist_LYSO = GetDataHistFromTH1(t_LYSO, E, "hE_lyso", "hist_lyso");
   cout << "no entries in RooDataHist LYSO = " << hist_LYSO->sum(false) << endl;
   RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO", *E,*hist_LYSO,0);
-  RooRealVar* lyso_yield = new RooRealVar("lyso_yield", "yield of lyso", 100, 0, 1000000);
+  RooRealVar* lyso_yield = new RooRealVar("lyso_yield", "yield of lyso", 100000, 0, 1000000);
   
   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
@@ -43,7 +43,10 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
   E->setBins(100);
-    
+  E->setRange("whole", 0, 1200);
+  E->setRange("betaContinuum", 700, 1200);
+  E->setRange("signalWindow", 420, 600) ;
+  
   TFile* f_LYSO = new TFile(lysoFile.c_str());
   TTree* t_LYSO = (TTree*) f_LYSO->Get("tree");
   RooAddPdf* model = MakeModel(E, t_LYSO);
@@ -55,11 +58,7 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   RooDataHist* hist = GetDataHistFromTH1(t, E, "hE_data", "hist_data");
   cout << "no entries in RooDataHist data = " << hist->sum(false) << endl;
 
-
-  E->setRange("whole", 0, 1200);
-  E->setRange("betaContinuum", 700, 1200);
-  
-  RooFitResult* fitRes = model->fitTo(*hist, Extended()); //, Range("betaContinuum"));
+  RooFitResult* fitRes = model->fitTo(*hist, Extended()); //,Range("betaContinuum"));
   // Plot unbinned data and histogram pdf overlaid
   RooPlot* frame = E->frame(Bins(100)) ;
   hist->plotOn(frame, DrawOption("PX"));
@@ -75,18 +74,18 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   PutText(0.7, 0.85, kBlack, "LAPD");
   PutText(0.7, 0.85-yShift, kBlack, "LPC");
   PutText(0.7, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
-  
-  return 0;
-  
-  /*
-  E.setRange("signal_window", 420, 600) ;
-  
-  RooAbsReal* igx_sig = sig_gaussian.createIntegral(E,NormSet(E),Range("signal_window")) ;
-  RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(E,NormSet(E),Range("signal_window")) ;
+
+  RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
+  RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) model->pdfList().find("histpdf_LYSO");
+  RooAbsReal* igx_sig = sig_gaussian->createIntegral(*E,NormSet(*E),Range("signal_window")) ;
+  RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*E,NormSet(*E),Range("signal_window")) ;
   double int_sig_window = igx_sig->getVal();
   double int_lyso_window = igx_lyso->getVal();
-  double yield_sig_window = int_sig_window * sig_yield.getVal();
-  double yield_lyso_window = int_lyso_window * lyso_yield.getVal();
+  
+  RooAbsReal* sig_yield = (RooAbsReal*) model->coefList().find("sig_yield");
+  RooAbsReal* lyso_yield = (RooAbsReal*) model->coefList().find("lyso_yield");
+  double yield_sig_window = int_sig_window * sig_yield->getVal();
+  double yield_lyso_window = int_lyso_window * lyso_yield->getVal();
   cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
   cout << "int[E|LYSO]_Norm[E] = " << int_lyso_window << endl;
   cout << "sig in window = "<< yield_sig_window << endl;
@@ -117,7 +116,8 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   cout << "N1prime = " << N1prime << endl;
   cout << "N2prime = " << N2prime << endl;
   cout << "s/sqrt(b) = "<< N2prime/sqrt(N1prime) << endl;
-  */
+  
+  return 0;
 }
 
 void FitLYSOPlusSig()
