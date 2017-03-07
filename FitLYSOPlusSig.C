@@ -13,9 +13,9 @@ RooDataHist* GetDataHistFromTH1(TTree* t, RooRealVar* var, string TH1Name, strin
   //return hist
 
   TH1* h = new TH1F(TH1Name.c_str(), TH1Name.c_str(), 200, 0, 1200);
-  TString s("E>>");
+  TString s("E[0]>>");
   s += TH1Name.c_str();
-  t->Draw(s.Data(), "NoPulses == 2 && Sat == 0");
+  t->Draw(s.Data(), "");
   return new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h)) ;
 }
 
