@@ -67,13 +67,13 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   model->plotOn(frame, Range("whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
   hist->plotOn(frame) ;
   frame->Draw();
-  
- // TH1* hh_1d = (TH1*) totalPdf->createHistogram("mean,sigma_g2,frac",25,25,25);
-  
   double yShift = 0.07;
   PutText(0.7, 0.85, kBlack, "LAPD");
   PutText(0.7, 0.85-yShift, kBlack, "LPC");
   PutText(0.7, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
+  
+  
+ // TH1* hh_1d = (TH1*) totalPdf->createHistogram("mean,sigma_g2,frac",25,25,25);
 
   RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
   RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) model->pdfList().find("histpdf_LYSO");
@@ -122,6 +122,6 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
 
 void FitLYSOPlusSig()
 {
-  FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run79.root");
-  //FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run63.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
+  //FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run79.root");
+  FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run63.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
 }
