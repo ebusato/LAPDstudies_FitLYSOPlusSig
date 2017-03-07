@@ -39,42 +39,8 @@ RooAddPdf* MakeModel(RooRealVar* E, TTree* t_LYSO)
   return model;
 }
 
-RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
+void MakeCalculationsSovSqrtB(RooAddPdf* model, RooRealVar* E, int noEntries)
 {
-  RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
-  E->setBins(100);
-  E->setRange("whole", 0, 1200);
-  E->setRange("betaContinuum", 700, 1200);
-  E->setRange("signalWindow", 420, 600) ;
-  
-  TFile* f_LYSO = new TFile(lysoFile.c_str());
-  TTree* t_LYSO = (TTree*) f_LYSO->Get("tree");
-  RooAddPdf* model = MakeModel(E, t_LYSO);
-  
-  TFile* f = new TFile(dataFile.c_str());
-  TTree* t = (TTree*) f->Get("tree");
-  int noEntries = t->GetEntries();
-
-  RooDataHist* hist = GetDataHistFromTH1(t, E, "hE_data", "hist_data");
-  cout << "no entries in RooDataHist data = " << hist->sum(false) << endl;
-
-  RooFitResult* fitRes = model->fitTo(*hist, Extended()); //,Range("betaContinuum"));
-  // Plot unbinned data and histogram pdf overlaid
-  RooPlot* frame = E->frame(Bins(100)) ;
-  hist->plotOn(frame, DrawOption("PX"));
-  model->plotOn(frame, Range("whole"));
-  model->plotOn(frame, Range("whole"), Components("sig_gaussian"),LineColor(kRed));
-  model->plotOn(frame, Range("whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
-  hist->plotOn(frame) ;
-  frame->Draw();
-  double yShift = 0.07;
-  PutText(0.7, 0.85, kBlack, "LAPD");
-  PutText(0.7, 0.85-yShift, kBlack, "LPC");
-  PutText(0.7, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
-  
-  
- // TH1* hh_1d = (TH1*) totalPdf->createHistogram("mean,sigma_g2,frac",25,25,25);
-
   RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
   RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) model->pdfList().find("histpdf_LYSO");
   RooAbsReal* igx_sig = sig_gaussian->createIntegral(*E,NormSet(*E),Range("signal_window")) ;
@@ -116,7 +82,43 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   cout << "N1prime = " << N1prime << endl;
   cout << "N2prime = " << N2prime << endl;
   cout << "s/sqrt(b) = "<< N2prime/sqrt(N1prime) << endl;
+}
+
+RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
+{
+  RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
+  E->setBins(100);
+  E->setRange("whole", 0, 1200);
+  E->setRange("betaContinuum", 700, 1200);
+  E->setRange("signalWindow", 420, 600) ;
   
+  TFile* f_LYSO = new TFile(lysoFile.c_str());
+  TTree* t_LYSO = (TTree*) f_LYSO->Get("tree");
+  RooAddPdf* model = MakeModel(E, t_LYSO);
+  
+  TFile* f = new TFile(dataFile.c_str());
+  TTree* t = (TTree*) f->Get("tree");
+  int noEntries = t->GetEntries();
+
+  RooDataHist* hist = GetDataHistFromTH1(t, E, "hE_data", "hist_data");
+  cout << "no entries in RooDataHist data = " << hist->sum(false) << endl;
+
+  RooFitResult* fitRes = model->fitTo(*hist, Extended()); //,Range("betaContinuum"));
+  // Plot unbinned data and histogram pdf overlaid
+  RooPlot* frame = E->frame(Bins(100)) ;
+  hist->plotOn(frame, DrawOption("PX"));
+  model->plotOn(frame, Range("whole"));
+  model->plotOn(frame, Range("whole"), Components("sig_gaussian"),LineColor(kRed));
+  model->plotOn(frame, Range("whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
+  hist->plotOn(frame) ;
+  frame->Draw();
+  double yShift = 0.07;
+  PutText(0.7, 0.85, kBlack, "LAPD");
+  PutText(0.7, 0.85-yShift, kBlack, "LPC");
+  PutText(0.7, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
+  
+  MakeCalculationsSovSqrtB(model, E, noEntries);
+ // TH1* hh_1d = (TH1*) totalPdf->createHistogram("mean,sigma_g2,frac",25,25,25);
   return 0;
 }
 
