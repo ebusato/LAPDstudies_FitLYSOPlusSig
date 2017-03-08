@@ -52,7 +52,7 @@ TH1F* MakeHistoInRange(TH1F* h, double min, double max, bool setErrorsToZero=fal
 	  int origHistoBin = h->GetXaxis()->FindBin(val);
 	  double binContent = h->GetBinContent(origHistoBin);
 	  double binError = h->GetBinError(origHistoBin);
-	  cout << i << "  " << origHistoBin<< "  " << val << "  " << binContent << "  " << binError << endl;
+	  //cout << i << "  " << origHistoBin<< "  " << val << "  " << binContent << "  " << binError << endl;
 	  hNew->SetBinContent(i, binContent);
 	  if(!setErrorsToZero) {
 		hNew->SetBinError(i, binError);
@@ -65,13 +65,19 @@ TH1F* MakeHistoInRange(TH1F* h, double min, double max, bool setErrorsToZero=fal
 
 void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRealVar* E, int noEntries)
 {
+  double signalWindow_min = 450;
+  double signalWindow_max = 570;
+/*
+  double signalWindow_min = 505;
+  double signalWindow_max = 510;*/
+  E->setRange("signalWindow", signalWindow_min, signalWindow_max) ;
+	
   RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
   RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) model->pdfList().find("histpdf_LYSO");
   RooAbsReal* sig_yield   = (RooAbsReal*) model->coefList().find("sig_yield");
   RooAbsReal* lyso_yield  = (RooAbsReal*) model->coefList().find("lyso_yield");
  
   // Analytical stuff
-  E->setRange("signalWindow", 450, 570) ;
   RooAbsReal* igx_sig = sig_gaussian->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
   RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
   double int_sig_window = igx_sig->getVal();
@@ -85,13 +91,13 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   cout << "lyso in window = "<< yield_lyso_window << endl;
   cout << "s/sqrt(b) = " << yield_sig_window / sqrt(yield_lyso_window) << endl;
   
-  double Z = 3.;
-  double N1 = yield_lyso_window;
-  double N2 = yield_sig_window;
+  double N1 = lyso_yield->getVal();
+  double N2 = sig_yield->getVal();
   double time = float(noEntries)/24; // around 24 Hz, to be adjusted
   double tau = 40e-3; // dead time around 40 ms, to be adjusted
   double m2 = N2/time;
   double poly_a = N2*N2;
+  double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
   double poly_b = -1*Z*Z*N1*m2*tau;
   double poly_c = Z*Z*N1*(m2*tau - 1);
   double delta = poly_b*poly_b - 4*poly_a*poly_c;
@@ -108,23 +114,28 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double N2prime = m2prime * time;
   cout << "N1prime = " << N1prime << endl;
   cout << "N2prime = " << N2prime << endl;
-  cout << "s/sqrt(b) = "<< N2prime/sqrt(N1prime) << endl;
+  cout << "s/sqrt(b) = "<< N2prime/sqrt(N1prime)*int_sig_window/sqrt(int_lyso_window) << endl;
 
   // OTH stuff
   TH1F* hLYSO_gen = (TH1F*) hist_LYSO->createHistogram("E");
   hLYSO_gen->Sumw2();
-  hLYSO_gen->Scale(lyso_yield->getVal()/hLYSO_gen->Integral());
+  
+  //hLYSO_gen->Scale(lyso_yield->getVal()/hLYSO_gen->Integral());
+  hLYSO_gen->Scale(N1prime/hLYSO_gen->Integral());
+  
   cout << "ERROR=" << hLYSO_gen->GetEntries() << "  " << hLYSO_gen->Integral() << "  " << hLYSO_gen->GetBinContent(hLYSO_gen->GetXaxis()->FindBin(400)) << " " << 
 hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
-  RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, sig_yield->getVal(), ExpectedData());
-  //RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, sig_yield->getVal()*0.1, ExpectedData());
+  
+  //RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, sig_yield->getVal(), ExpectedData());
+  RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, N2prime, ExpectedData());
+  
   TH1F* hSig_gen = (TH1F*) dhSig_gen->createHistogram("E");
   cout << "hSig_gen: " << hSig_gen->Integral() << endl;
     
-  TH1F* hLYSO_gen_range = MakeHistoInRange(hLYSO_gen, 450, 570, true);
-  TH1F* hSig_gen_range = MakeHistoInRange(hSig_gen, 450, 570, true);
-  TCanvas* c2 = new TCanvas("c2","c2",800,400);
-  c2->Divide(2,1);
+  TH1F* hLYSO_gen_range = MakeHistoInRange(hLYSO_gen, signalWindow_min, signalWindow_max, true);
+  TH1F* hSig_gen_range = MakeHistoInRange(hSig_gen, signalWindow_min, signalWindow_max, true);
+  TCanvas* c2 = new TCanvas("c2","c2",1200,400);
+  c2->Divide(3,1);
   c2->cd(1);
   hLYSO_gen->Draw("e");
   hLYSO_gen_range->Draw("histsame");
@@ -133,15 +144,26 @@ hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
   hSig_gen->Draw("e");
   hSig_gen_range->Draw("histsame");
   hSig_gen_range->Draw("same");
-  
-  TFile* f = new TFile("OTHinput/histos.root", "recreate");
-  hLYSO_gen_range->Write();
-  hSig_gen_range->Write();
+  c2->cd(3);
   TH1F* hData_gen_range = (TH1F*) hLYSO_gen_range->Clone("hData_gen_range");
   hData_gen_range->Add(hSig_gen_range);
-  hData_gen_range->Write();
-  f->Write();
-  f->Close();
+  hData_gen_range->GetYaxis()->SetRangeUser(0, hData_gen_range->GetMaximum()*1.3);
+  hData_gen_range->Draw("e");
+  hLYSO_gen_range->Draw("same");
+  hSig_gen_range->Draw("same");
+  
+//   TFile* f = new TFile("OTHinput/histos.root", "recreate");
+//   hLYSO_gen_range->Write();
+//   hSig_gen_range->Write();
+//   hData_gen_range->Write();
+//   f->Write();
+//   f->Close();
+  
+  ofstream of("OTHinput/inputYield.dat");
+  of << "+bg LYSO " << N1prime*int_lyso_window << endl << endl;
+  of << "+sig Sig " << N2prime*int_sig_window << endl << endl;
+  of << "+data " << N1prime*int_lyso_window + N2prime*int_sig_window << endl;
+  system("root -l -b -q load.C 'runSignificance.C(\"OTHinput/inputYield.dat\")'");
 }
 
 RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
