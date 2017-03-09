@@ -187,7 +187,7 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   //E->setRange("betaContinuum", 700, E->getMax());
   RooFitResult* fitRes = model->fitTo(*hist, Extended()); //,Range("betaContinuum"));
   TCanvas* c1 = new TCanvas();
-  RooPlot* frame = E->frame(Bins(100)) ;
+  RooPlot* frame = E->frame(Bins(100));
   hist->plotOn(frame); //, DrawOption("PX"));
   model->plotOn(frame, Range("whole"));
   model->plotOn(frame, Range("whole"), Components("sig_gaussian"),LineColor(kRed));
