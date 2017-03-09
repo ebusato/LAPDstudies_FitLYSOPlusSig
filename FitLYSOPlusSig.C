@@ -5,6 +5,15 @@
 #include "RooPlot.h"
 using namespace RooFit ;
 
+// returns run duration in seconds
+double RunDuration(TTree* t)
+{
+  t->GetEntry(t->GetEntries()-1);
+  double timeEnd = t->GetLeaf("TimeStamp")->GetValue()*1/64e6;
+  t->GetEntry(0);
+  double timeBeg = t->GetLeaf("TimeStamp")->GetValue()*1/64e6;
+  return timeEnd - timeBeg;
+}
 
 RooDataHist* GetDataHistFromTH1(TTree* t, RooRealVar* var, string TH1Name, string histName)
 {
@@ -89,7 +98,8 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double yield_lyso_window = int_lyso_window * lyso_yield->getVal();
   cout << "sig in window = "<< yield_sig_window << endl;
   cout << "lyso in window = "<< yield_lyso_window << endl;
-  cout << "s/sqrt(b) = " << yield_sig_window / sqrt(yield_lyso_window) << endl;
+  cout << "s_window/sqrt(b_window) = " << yield_sig_window / sqrt(yield_lyso_window) << endl;
+  cout << "s_tot/b_tot = " << sig_yield->getVal() / lyso_yield->getVal() << endl;
   
   double N1 = lyso_yield->getVal();
   double N2 = sig_yield->getVal();
@@ -194,10 +204,15 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   model->plotOn(frame, Range("whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
   hist->plotOn(frame); //, DrawOption("PX"));
   frame->Draw();
+  double xText = 0.55;
   double yShift = 0.07;
-  PutText(0.65, 0.85, kBlack, "LAPD");
-  PutText(0.65, 0.85-yShift, kBlack, "LPC");
-  PutText(0.65, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
+  PutText(xText, 0.85, kBlack, "LAPD");
+  PutText(xText, 0.85-yShift, kBlack, "LPC");
+  stringstream ss;
+  ss.precision(3);
+  ss << "Run duration: " << RunDuration(t)/60. << " min";
+  PutText(xText, 0.85-2*yShift, kBlack, ss.str().c_str());
+  PutText(xText, 0.85-3*yShift, kBlack, "Na22 (16 kBq)");
   
   MakeCalculationsSensitivity(hist_LYSO, model, E, noEntries);
   return 0;
