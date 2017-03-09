@@ -23,6 +23,7 @@ RooDataHist* GetDataHistFromTH1(TTree* t, RooRealVar* var, string TH1Name, strin
 
   TH1* h = new TH1F(TH1Name.c_str(), TH1Name.c_str(), var->getBinning().numBins(), var->getMin(), var->getMax());
   TString s("E[0]>>");
+//   TString s("Zmaa>>");
   s += TH1Name.c_str();
   t->Draw(s.Data(), "", "goff");
   return new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h)) ;
@@ -35,6 +36,8 @@ RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
  
   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
+//   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", -10, -40, 20, "keV");
+//   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 20, 5, 50, "keV");
   RooGaussian* sig_gaussian = new RooGaussian("sig_gaussian", "gaussian for signal peak", *E, *sig_peak_mean, *sig_peak_sigma);
   RooRealVar* sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 1000000);
   
@@ -76,6 +79,7 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
 {
   double signalWindow_min = 450;
   double signalWindow_max = 570;
+
 /*
   double signalWindow_min = 505;
   double signalWindow_max = 510;*/
@@ -93,16 +97,25 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double int_lyso_window = igx_lyso->getVal();
   cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
   cout << "int[E|LYSO]_Norm[E] = " << int_lyso_window << endl;
-  
-  double yield_sig_window = int_sig_window * sig_yield->getVal();
-  double yield_lyso_window = int_lyso_window * lyso_yield->getVal();
-  cout << "sig in window = "<< yield_sig_window << endl;
-  cout << "lyso in window = "<< yield_lyso_window << endl;
-  cout << "s_window/sqrt(b_window) = " << yield_sig_window / sqrt(yield_lyso_window) << endl;
-  cout << "s_tot/b_tot = " << sig_yield->getVal() / lyso_yield->getVal() << endl;
-  
+ 
+  double N1_original = hist_LYSO->sum(kFALSE);
+  double N1_original_err = sqrt(N1_original);
+  cout << "N1_original = " << N1_original << " +- " << N1_original_err << endl;
+    
   double N1 = lyso_yield->getVal();
   double N2 = sig_yield->getVal();
+  double N1_err = N1_original_err * N1 / N1_original;
+  cout << "N1 = " << N1 << " +- " << N1_err << endl;
+  cout << "N2 = " << N2 << endl;
+  cout << "N2/N1 = " << N2 / N1 << endl;
+  
+  double N2_window = int_sig_window * N2;
+  double N1_window = int_lyso_window * N1;
+  double N1_window_err = N1_err * int_lyso_window;
+  cout << "N2_window = "<< N2_window << endl;
+  cout << "N1_window = "<< N1_window << endl;
+  cout << "s_window/sqrt(b_window) = " << N2_window / sqrt(N1_window) << endl;
+
   double time = float(noEntries)/24; // around 24 Hz, to be adjusted
   double tau = 41.e-3; // dead time around 40 ms, to be adjusted
   double m2 = N2/time;
@@ -124,7 +137,13 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double N2prime = m2prime * time;
   cout << "N1prime = " << N1prime << endl;
   cout << "N2prime = " << N2prime << endl;
-  cout << "s/sqrt(b) = "<< N2prime/sqrt(N1prime)*int_sig_window/sqrt(int_lyso_window) << endl;
+  double N1prime_err = N1_original_err * N1prime / N1_original;
+  double N1primeWindow = N1prime*int_lyso_window;
+  double N2primeWindow = N2prime*int_sig_window;
+  double N1primeErrorWindow = N1prime_err * int_lyso_window;
+  cout << "N1prime in window = " << N1primeWindow << " +- " << N1primeErrorWindow << endl;
+  cout << "N2prime in window = " << N2primeWindow << endl;
+  cout << "s_window/sqrt(b_window) = "<< N2primeWindow/sqrt(N1primeWindow) << endl;
 
   // OTH stuff
   TH1F* hLYSO_gen = (TH1F*) hist_LYSO->createHistogram("E");
@@ -170,8 +189,8 @@ hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
 //   f->Close();
   
   ofstream of("OTHinput/inputYield.dat");
-  of << "+bg LYSO " << N1prime*int_lyso_window << endl << endl;
-  of << "+sig Sig " << N2prime*int_sig_window << endl << endl;
+  of << "+bg LYSO " << N1primeWindow << " " << N1primeErrorWindow << endl << endl;
+  of << "+sig Sig " << N2primeWindow << endl << endl;
   of << "+data " << N1prime*int_lyso_window + N2prime*int_sig_window << endl;
   system("root -l -b -q load.C 'runSignificance.C(\"OTHinput/inputYield.dat\")'");
 }
@@ -180,6 +199,8 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
   E->setBins(150);
+//   RooRealVar* E = new RooRealVar("E", "Energy", -200, 200, "keV");
+//   E->setBins(350);
   E->setRange("whole", E->getMin(), E->getMax());
   
   TFile* f_LYSO = new TFile(lysoFile.c_str());

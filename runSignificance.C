@@ -56,7 +56,7 @@ void runSignificance(const std::string& file1) {
 
   //oth.printSamples();
   
-  const int Nexp=1e5;
+  const int Nexp=5e5;
   
   // By default, the signal strength is set to 1. If you want another value, just add a third argument to
   // oth.significance(...) with the desired value. 
