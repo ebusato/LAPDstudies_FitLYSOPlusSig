@@ -94,7 +94,7 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double N1 = lyso_yield->getVal();
   double N2 = sig_yield->getVal();
   double time = float(noEntries)/24; // around 24 Hz, to be adjusted
-  double tau = 41.15e-3; // dead time around 40 ms, to be adjusted
+  double tau = 41.e-3; // dead time around 40 ms, to be adjusted
   double m2 = N2/time;
   double poly_a = N2*N2;
   double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
