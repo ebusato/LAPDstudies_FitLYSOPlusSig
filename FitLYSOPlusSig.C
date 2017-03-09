@@ -94,7 +94,7 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double N1 = lyso_yield->getVal();
   double N2 = sig_yield->getVal();
   double time = float(noEntries)/24; // around 24 Hz, to be adjusted
-  double tau = 40e-3; // dead time around 40 ms, to be adjusted
+  double tau = 41.15e-3; // dead time around 40 ms, to be adjusted
   double m2 = N2/time;
   double poly_a = N2*N2;
   double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
@@ -195,9 +195,9 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   hist->plotOn(frame); //, DrawOption("PX"));
   frame->Draw();
   double yShift = 0.07;
-  PutText(0.7, 0.85, kBlack, "LAPD");
-  PutText(0.7, 0.85-yShift, kBlack, "LPC");
-  PutText(0.7, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
+  PutText(0.65, 0.85, kBlack, "LAPD");
+  PutText(0.65, 0.85-yShift, kBlack, "LPC");
+  PutText(0.65, 0.85-2*yShift, kBlack, "Na22 (16 kBq)");
   
   MakeCalculationsSensitivity(hist_LYSO, model, E, noEntries);
   return 0;
@@ -207,4 +207,7 @@ void FitLYSOPlusSig()
 {
   //FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run79.root");
   FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run63.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
+  
+  //FitLYSOPlusSig("~/Travail/Imaging/serverAvirm/DPGA/DataBackup/godaq_rootfiles/analysis_v2.10.0/run63.root", 
+//"~/Travail/Imaging/serverAvirm/DPGA/DataBackup/godaq_rootfiles/analysis_v2.10.0/run78.root");
 }
