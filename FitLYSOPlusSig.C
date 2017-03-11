@@ -215,8 +215,8 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   RooDataHist* hist = GetDataHistFromTH1(t, E, "hE_data", "dhE_data");
   cout << "no entries in RooDataHist data = " << hist->sum(false) << endl;
 
-  //E->setRange("betaContinuum", 700, E->getMax());
-  RooFitResult* fitRes = model->fitTo(*hist, Extended()); //,Range("betaContinuum"));
+  E->setRange("fitRange", 350, E->getMax());
+  RooFitResult* fitRes = model->fitTo(*hist, Extended(),Range("fitRange"));
   TCanvas* c1 = new TCanvas();
   RooPlot* frame = E->frame(Bins(100));
   hist->plotOn(frame); //, DrawOption("PX"));
@@ -228,12 +228,12 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   double xText = 0.55;
   double yShift = 0.07;
   PutText(xText, 0.85, kBlack, "LAPD");
-  PutText(xText, 0.85-yShift, kBlack, "LPC");
+ // PutText(xText, 0.85-yShift, kBlack, "LPC");
+  PutText(xText, 0.85-1*yShift, kBlack, "^{22}Na (16 kBq)");
   stringstream ss;
   ss.precision(3);
   ss << "Run duration: " << RunDuration(t)/60. << " min";
   PutText(xText, 0.85-2*yShift, kBlack, ss.str().c_str());
-  PutText(xText, 0.85-3*yShift, kBlack, "Na22 (16 kBq)");
   
   MakeCalculationsSensitivity(hist_LYSO, model, E, noEntries);
   return 0;
