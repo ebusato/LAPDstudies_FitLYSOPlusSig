@@ -21,12 +21,13 @@ RooDataHist* GetDataHistFromTH1(TTree* t, RooRealVar* var, string TH1Name, strin
   //RooDataHist* hist = data->binnedClone();
   //return hist
 
-  TH1* h = new TH1F(TH1Name.c_str(), TH1Name.c_str(), var->getBinning().numBins(), var->getMin(), var->getMax());
-  TString s("E[0]>>");
+  TH1* h0 = new TH1F(TH1Name.c_str(), TH1Name.c_str(), var->getBinning().numBins(), var->getMin(), var->getMax());
+  TString s0("E[0]>>");
 //   TString s("Zmaa>>");
-  s += TH1Name.c_str();
-  t->Draw(s.Data(), "", "goff");
-  return new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h)) ;
+  s0 += TH1Name.c_str();
+  t->Draw(s0.Data()); // , "E[1] > 420 && E[1] < 595", "goff");
+  
+  return new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h0)) ;
 }
 
 RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
