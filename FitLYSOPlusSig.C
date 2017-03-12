@@ -37,8 +37,8 @@ RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
  
   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
-//   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", -10, -40, 20, "keV");
-//   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 20, 5, 50, "keV");
+//   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 1000, 800, 1200, "keV");
+//   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 5, 90, "keV");
   RooGaussian* sig_gaussian = new RooGaussian("sig_gaussian", "gaussian for signal peak", *E, *sig_peak_mean, *sig_peak_sigma);
   RooRealVar* sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 1000000);
   
@@ -82,8 +82,8 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double signalWindow_max = 570;
 
 /*
-  double signalWindow_min = 505;
-  double signalWindow_max = 510;*/
+  double signalWindow_min = 900;
+  double signalWindow_max = 1100;*/
   E->setRange("signalWindow", signalWindow_min, signalWindow_max) ;
 	
   RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
@@ -200,8 +200,7 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
   E->setBins(150);
-//   RooRealVar* E = new RooRealVar("E", "Energy", -200, 200, "keV");
-//   E->setBins(350);
+
   E->setRange("whole", E->getMin(), E->getMax());
   
   TFile* f_LYSO = new TFile(lysoFile.c_str());
@@ -217,6 +216,7 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
   cout << "no entries in RooDataHist data = " << hist->sum(false) << endl;
 
   E->setRange("fitRange", 350, E->getMax());
+//   E->setRange("fitRange", 800, E->getMax());
   RooFitResult* fitRes = model->fitTo(*hist, Extended(),Range("fitRange"));
   TCanvas* c1 = new TCanvas();
   RooPlot* frame = E->frame(Bins(100));
