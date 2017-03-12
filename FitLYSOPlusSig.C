@@ -85,16 +85,16 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
 //   double signalWindow_min = 900;
 //   double signalWindow_max = 1100;
   E->setRange("signalWindow", signalWindow_min, signalWindow_max) ;
-	
-  RooAbsReal* sig_yield   = (RooAbsReal*) model->coefList().find("sig_yield");
-  RooAbsReal* lyso_yield  = (RooAbsReal*) model->coefList().find("lyso_yield");
- 
+
   // Analytical stuff
  
   double N1_original = hist_LYSO->sum(kFALSE);
   double N1_original_err = sqrt(N1_original);
   cout << "N1_original = " << N1_original << " +- " << N1_original_err << endl;
-    
+    	
+  RooAbsReal* sig_yield   = (RooAbsReal*) model->coefList().find("sig_yield");
+  RooAbsReal* lyso_yield  = (RooAbsReal*) model->coefList().find("lyso_yield");
+ 
   double N1 = lyso_yield->getVal();
   double N2 = sig_yield->getVal();
   double N1_err = N1_original_err * N1 / N1_original;
