@@ -119,7 +119,7 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   // We assume that this cut selects 100% of the signal (maybe not that true because of compton interactions -> to be estimated on simulation precisely)
   // On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 1% (without this cut we have 800000 events in E[0]>>h histogram,
   // and with the cut we have 8092 events)
-   int_sig_window = 1;
+   int_sig_window = 0.5;
    int_lyso_window = 0.01;
   
    double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
