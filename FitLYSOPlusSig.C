@@ -81,23 +81,15 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   double signalWindow_min = 450;
   double signalWindow_max = 570;
 
-/*
-  double signalWindow_min = 900;
-  double signalWindow_max = 1100;*/
+
+//   double signalWindow_min = 900;
+//   double signalWindow_max = 1100;
   E->setRange("signalWindow", signalWindow_min, signalWindow_max) ;
 	
-  RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
-  RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) model->pdfList().find("histpdf_LYSO");
   RooAbsReal* sig_yield   = (RooAbsReal*) model->coefList().find("sig_yield");
   RooAbsReal* lyso_yield  = (RooAbsReal*) model->coefList().find("lyso_yield");
  
   // Analytical stuff
-  RooAbsReal* igx_sig = sig_gaussian->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
-  RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
-  double int_sig_window = igx_sig->getVal();
-  double int_lyso_window = igx_lyso->getVal();
-  cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
-  cout << "int[E|LYSO]_Norm[E] = " << int_lyso_window << endl;
  
   double N1_original = hist_LYSO->sum(kFALSE);
   double N1_original_err = sqrt(N1_original);
@@ -109,19 +101,34 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   cout << "N1 = " << N1 << " +- " << N1_err << endl;
   cout << "N2 = " << N2 << endl;
   cout << "N2/N1 = " << N2 / N1 << endl;
-  
-  double N2_window = int_sig_window * N2;
-  double N1_window = int_lyso_window * N1;
-  double N1_window_err = N1_err * int_lyso_window;
-  cout << "N2_window = "<< N2_window << endl;
-  cout << "N1_window = "<< N1_window << endl;
-  cout << "s_window/sqrt(b_window) = " << N2_window / sqrt(N1_window) << endl;
 
+  ///////////////////////////////////////////////////////////
+  // Calculation of z (significance)
+  
+  // Used to compute selection efficiency of E[0] \in signalWindow
+  RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
+  RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) model->pdfList().find("histpdf_LYSO");
+  RooAbsReal* igx_sig = sig_gaussian->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
+  RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
+  double int_sig_window = igx_sig->getVal();
+  double int_lyso_window = igx_lyso->getVal();
+  cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
+  cout << "int[E|LYSO]_Norm[E] = " << int_lyso_window << endl;
+  
+  // Alternative selection cut: E[0] > 425 && E[0] < 595 && E[1] > 425 && E[1] < 595
+  // We assume that this cut selects 100% of the signal (maybe not that true because of compton interactions -> to be estimated on simulation precisely)
+  // On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 1% (without this cut we have 800000 events in E[0]>>h histogram,
+  // and with the cut we have 8092 events)
+   int_sig_window = 1;
+   int_lyso_window = 0.01;
+  
+   double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
+  ///////////////////////////////////////////////////////////
+  
   double time = float(noEntries)/24; // around 24 Hz, to be adjusted
   double tau = 41.e-3; // dead time around 40 ms, to be adjusted
   double m2 = N2/time;
   double poly_a = N2*N2;
-  double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
   double poly_b = -1*Z*Z*N1*m2*tau;
   double poly_c = Z*Z*N1*(m2*tau - 1);
   double delta = poly_b*poly_b - 4*poly_a*poly_c;
@@ -131,6 +138,16 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   cout << "sol+ = " << solplus << endl;
   cout << "sol- = " << solminus << endl;
   
+  ///////////////////////////////////////////////////////////////
+  // not used, just to know the values
+  double N2_window = int_sig_window * N2;
+  double N1_window = int_lyso_window * N1;
+  double N1_window_err = N1_err * int_lyso_window;
+  cout << "N2_window = "<< N2_window << endl;
+  cout << "N1_window = "<< N1_window << " +- " << N1_window_err << endl;
+  cout << "s_window/sqrt(b_window) = " << N2_window / sqrt(N1_window) << endl;
+  ///////////////////////////////////////////////////////////////
+  
   double m1 = N1/time;
   double m1prime = m1/(1+m2*tau*(solplus-1));
   double m2prime = solplus*m2/(1+m2*tau*(solplus-1));
@@ -139,6 +156,8 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   cout << "N1prime = " << N1prime << endl;
   cout << "N2prime = " << N2prime << endl;
   double N1prime_err = N1_original_err * N1prime / N1_original;
+  
+  
   double N1primeWindow = N1prime*int_lyso_window;
   double N2primeWindow = N2prime*int_sig_window;
   double N1primeErrorWindow = N1prime_err * int_lyso_window;
@@ -147,6 +166,7 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   cout << "s_window/sqrt(b_window) = "<< N2primeWindow/sqrt(N1primeWindow) << endl;
 
   // OTH stuff
+  /*
   TH1F* hLYSO_gen = (TH1F*) hist_LYSO->createHistogram("E");
   hLYSO_gen->Sumw2();
   
@@ -181,7 +201,7 @@ hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
   hData_gen_range->Draw("e");
   hLYSO_gen_range->Draw("same");
   hSig_gen_range->Draw("same");
-  
+  */
 //   TFile* f = new TFile("OTHinput/histos.root", "recreate");
 //   hLYSO_gen_range->Write();
 //   hSig_gen_range->Write();
@@ -200,7 +220,8 @@ RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
   E->setBins(150);
-
+//   RooRealVar* E = new RooRealVar("E", "Energy", 200, 1800, "keV");
+//   E->setBins(150);
   E->setRange("whole", E->getMin(), E->getMax());
   
   TFile* f_LYSO = new TFile(lysoFile.c_str());
