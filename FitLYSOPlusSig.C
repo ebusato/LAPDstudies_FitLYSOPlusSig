@@ -115,12 +115,13 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
   cout << "int[E|LYSO]_Norm[E] = " << int_lyso_window << endl;
   
-  // Alternative selection cut: E[0] > 425 && E[0] < 595 && E[1] > 425 && E[1] < 595
-  // We assume that this cut selects 100% of the signal (maybe not that true because of compton interactions -> to be estimated on simulation precisely)
-  // On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 1% (without this cut we have 800000 events in E[0]>>h histogram,
-  // and with the cut we have 8092 events)
+  // Alternative selection cut: E[0] > 425 && E[0] < 595 && E[1] > 425 && E[1] < 595 && fabs(T30[0] - T30[1]) < 3.6
+  // We assume that this cut selects 50% of the signal (rough estimation, this needs to be estimated on simulation)
+  // On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 0.0033...% (without this cut we have 800000 events in E[0]>>h histogram,
+  // and with the cut we have 2666 events)
+  // Try to improve by also cutting on CTR
    int_sig_window = 0.5;
-   int_lyso_window = 0.01;
+   int_lyso_window = 0.0034;
   
    double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
   ///////////////////////////////////////////////////////////
