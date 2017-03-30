@@ -5,30 +5,43 @@
 #include "RooPlot.h"
 using namespace RooFit ;
 
-// returns run duration in seconds
-double RunDuration(TTree* t)
-{
-  t->GetEntry(t->GetEntries()-1);
-  double timeEnd = t->GetLeaf("TimeStamp")->GetValue()*1/64e6;
-  t->GetEntry(0);
-  double timeBeg = t->GetLeaf("TimeStamp")->GetValue()*1/64e6;
-  return timeEnd - timeBeg;
-}
+class Data {
+public:
+	Data(TTree* t);
+	RooDataHist* GetDataHistFromTH1(RooRealVar* var, string TH1Name, string histName);
+	double RunDuration();
+	
+	TTree* m_tree;
+	TCut m_cut;
+};
 
-RooDataHist* GetDataHistFromTH1(TTree* t, RooRealVar* var, string TH1Name, string histName)
-{
-  //RooDataSet* data = new RooDataSet("data", "data", t, var);
-  //RooDataHist* hist = data->binnedClone();
-  //return hist
+Data::Data(TTree* t) : m_tree(t),
+		       m_cut("")
+{}
 
+RooDataHist* Data::GetDataHistFromTH1(RooRealVar* var, string TH1Name, string histName)
+{
   TH1* h0 = new TH1F(TH1Name.c_str(), TH1Name.c_str(), var->getBinning().numBins(), var->getMin(), var->getMax());
   TString s0("E[0]>>");
-//   TString s("Zmaa>>");
   s0 += TH1Name.c_str();
-  t->Draw(s0.Data()); // , "E[1] > 420 && E[1] < 595", "goff");
+  m_tree->Draw(s0.Data(), m_cut);
   
-  return new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h0)) ;
+  RooDataHist* dh = new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h0));
+  cout << "no entries in RooDataHist " << histName << " = " << dh->sum(false) << endl;
+  
+  return dh;
 }
+
+// returns run duration in minutes
+double Data::RunDuration()
+{
+  m_tree->GetEntry(m_tree->GetEntries()-1);
+  double timeEnd = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
+  m_tree->GetEntry(0);
+  double timeBeg = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
+  return (timeEnd - timeBeg)/60;
+}
+
 
 RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
 {
@@ -37,8 +50,6 @@ RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
  
   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
-//   RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 1000, 800, 1200, "keV");
-//   RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 5, 90, "keV");
   RooGaussian* sig_gaussian = new RooGaussian("sig_gaussian", "gaussian for signal peak", *E, *sig_peak_mean, *sig_peak_sigma);
   RooRealVar* sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 1000000);
   
@@ -50,6 +61,7 @@ RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
   return model;
 }
 
+/*
 TH1F* MakeHistoInRange(TH1F* h, double min, double max, bool setErrorsToZero=false)
 {
   TString newName(h->GetName());
@@ -75,6 +87,7 @@ TH1F* MakeHistoInRange(TH1F* h, double min, double max, bool setErrorsToZero=fal
   hNew->SetLineColor(kRed);
   return hNew;
 }
+*/
 
 void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRealVar* E, int noEntries)
 {
@@ -217,55 +230,59 @@ hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
   system("root -l -b -q load.C 'runSignificance.C(\"OTHinput/inputYield.dat\")'");
 }
 
-RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile)
+RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
   E->setBins(150);
-//   RooRealVar* E = new RooRealVar("E", "Energy", 200, 1800, "keV");
-//   E->setBins(150);
-  E->setRange("whole", E->getMin(), E->getMax());
+  E->setRange("range_whole", E->getMin(), E->getMax());
+  E->setRange("range_400_Max", 400, E->getMax());
+  E->setRange("range_450_Max", 450, E->getMax());
+  E->setRange("range_650_Max", 650, E->getMax());
   
   TFile* f_LYSO = new TFile(lysoFile.c_str());
   TTree* t_LYSO = (TTree*) f_LYSO->Get("tree");
-  RooDataHist* hist_LYSO = GetDataHistFromTH1(t_LYSO, E, "hE_lyso", "dhE_lyso");
-  cout << "no entries in RooDataHist LYSO = " << hist_LYSO->sum(false) << endl;
-  RooAddPdf* model = MakeModel(E, hist_LYSO);
   
-  TFile* f = new TFile(dataFile.c_str());
-  TTree* t = (TTree*) f->Get("tree");
-  int noEntries = t->GetEntries();
-  RooDataHist* hist = GetDataHistFromTH1(t, E, "hE_data", "dhE_data");
-  cout << "no entries in RooDataHist data = " << hist->sum(false) << endl;
+  TFile* f_Na22 = new TFile(na22File.c_str());
+  TTree* t_Na22 = (TTree*) f_Na22->Get("tree");
+ 
+  Data* dataLYSO = new Data(t_LYSO);
+  Data* dataNa22 = new Data(t_Na22);
 
-  E->setRange("fitRange", 350, E->getMax());
+  RooDataHist* hist_LYSO = dataLYSO->GetDataHistFromTH1(E, "hE_lyso", "dhE_lyso");
+  RooDataHist* hist_Na22 = dataNa22->GetDataHistFromTH1(E, "hE_data", "dhE_data");
+  
+  RooAddPdf* model = MakeModel(E, hist_LYSO);
+ 
+  int noEntries = t_Na22->GetEntries();
+
 //   E->setRange("fitRange", 800, E->getMax());
-  RooFitResult* fitRes = model->fitTo(*hist, Extended(),Range("fitRange"));
+  RooFitResult* fitRes = model->fitTo(*hist_Na22, Extended(),Range("range_450_Max"));
   TCanvas* c1 = new TCanvas();
   RooPlot* frame = E->frame(Bins(100));
-  hist->plotOn(frame); //, DrawOption("PX"));
-  model->plotOn(frame, Range("whole"));
-  model->plotOn(frame, Range("whole"), Components("sig_gaussian"),LineColor(kRed));
-  model->plotOn(frame, Range("whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
-  hist->plotOn(frame); //, DrawOption("PX"));
+  hist_Na22->plotOn(frame); //, DrawOption("PX"));
+  model->plotOn(frame, Range("range_whole"));
+  model->plotOn(frame, Range("range_whole"), Components("sig_gaussian"),LineColor(kRed));
+  model->plotOn(frame, Range("range_whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
+  hist_Na22->plotOn(frame); //, DrawOption("PX"));
   frame->Draw();
   double xText = 0.55;
   double yShift = 0.07;
-  PutText(xText, 0.85, kBlack, "LAPD");
+  PutText(xText, 0.81, kBlack, "LAPD");
  // PutText(xText, 0.85-yShift, kBlack, "LPC");
-  PutText(xText, 0.85-1*yShift, kBlack, "^{22}Na (16 kBq)");
+  PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (16 kBq)");
   stringstream ss;
   ss.precision(3);
-  ss << "Run duration: " << RunDuration(t)/60. << " min";
-  PutText(xText, 0.85-2*yShift, kBlack, ss.str().c_str());
+  ss << "Run duration: " << dataNa22->RunDuration() << " min";
+  PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
   
-  MakeCalculationsSensitivity(hist_LYSO, model, E, noEntries);
+  //MakeCalculationsSensitivity(hist_LYSO, model, E, noEntries);
   return 0;
 }
 
 void FitLYSOPlusSig()
 {
-  //FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run79.root");
-  FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run63.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
+//   FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
+  FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
   
   //FitLYSOPlusSig("~/Travail/Imaging/serverAvirm/DPGA/DataBackup/godaq_rootfiles/analysis_v2.10.0/run63.root", 
 //"~/Travail/Imaging/serverAvirm/DPGA/DataBackup/godaq_rootfiles/analysis_v2.10.0/run78.root");
