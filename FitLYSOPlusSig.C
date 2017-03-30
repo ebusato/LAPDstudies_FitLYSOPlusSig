@@ -24,7 +24,7 @@ RooDataHist* Data::GetDataHistFromTH1(RooRealVar* var, string TH1Name, string hi
   TH1* h0 = new TH1F(TH1Name.c_str(), TH1Name.c_str(), var->getBinning().numBins(), var->getMin(), var->getMax());
   TString s0("E[0]>>");
   s0 += TH1Name.c_str();
-  m_tree->Draw(s0.Data(), m_cut);
+  m_tree->Draw(s0.Data(), m_cut, "goff");
   
   RooDataHist* dh = new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h0));
   cout << "no entries in RooDataHist " << histName << " = " << dh->sum(false) << endl;
@@ -35,7 +35,11 @@ RooDataHist* Data::GetDataHistFromTH1(RooRealVar* var, string TH1Name, string hi
 // returns run duration in minutes
 double Data::RunDuration()
 {
-  m_tree->GetEntry(m_tree->GetEntries()-1);
+  m_tree->Draw(">>evtlist", m_cut);
+  TEventList *evtlist = (TEventList*)gDirectory->Get("evtlist");
+  int Nevents = evtlist->GetN();
+  m_tree->GetEntry(evtlist->GetEntry(Nevents - 1));
+  //m_tree->GetEntry(m_tree->GetEntries()-1);
   double timeEnd = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
   m_tree->GetEntry(0);
   double timeBeg = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
@@ -57,6 +61,12 @@ RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
   RooArgList* yields = new RooArgList();
   shapes->add(*histpdf_LYSO); yields->add(*lyso_yield);
   shapes->add(*sig_gaussian);  yields->add(*sig_yield);
+  sig_peak_mean->setVal(508);
+  sig_peak_mean->setConstant(1);
+  sig_peak_sigma->setVal(30);
+  sig_peak_sigma->setConstant(1);
+  sig_yield->setVal(1500);
+  sig_yield->setConstant(1);
   RooAddPdf* model = new RooAddPdf("totalPdf", "sum of signal and background PDF's", *shapes, *yields);
   return model;
 }
@@ -248,6 +258,9 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
   Data* dataLYSO = new Data(t_LYSO);
   Data* dataNa22 = new Data(t_Na22);
 
+  dataLYSO->m_cut = "";
+  dataNa22->m_cut = "Evt < 50000 && Sat[0] == 0";
+  
   RooDataHist* hist_LYSO = dataLYSO->GetDataHistFromTH1(E, "hE_lyso", "dhE_lyso");
   RooDataHist* hist_Na22 = dataNa22->GetDataHistFromTH1(E, "hE_data", "dhE_data");
   
@@ -256,7 +269,7 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
   int noEntries = t_Na22->GetEntries();
 
 //   E->setRange("fitRange", 800, E->getMax());
-  RooFitResult* fitRes = model->fitTo(*hist_Na22, Extended(),Range("range_450_Max"));
+  RooFitResult* fitRes = model->fitTo(*hist_Na22, Extended(),Range("range_650_Max"));
   TCanvas* c1 = new TCanvas();
   RooPlot* frame = E->frame(Bins(100));
   hist_Na22->plotOn(frame); //, DrawOption("PX"));
