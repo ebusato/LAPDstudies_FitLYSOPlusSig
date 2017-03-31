@@ -78,11 +78,8 @@ Model::Model(RooRealVar* E, Data* na22, Data* lyso) : m_E(E),
   m_sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
   m_sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
 	
-  cout << "here1 " << m_LYSO << " " << m_LYSO->m_dh << " " << m_E << endl;
   RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO", *m_E,*(m_LYSO->m_dh),0);
-  cout << "here2" << endl;
   RooGaussian* sig_gaussian = new RooGaussian("sig_gaussian", "gaussian for signal peak", *m_E, *m_sig_peak_mean, *m_sig_peak_sigma);
-   cout << "here3" << endl;
    
   RooArgList* shapes = new RooArgList();
   RooArgList* yields = new RooArgList();
@@ -92,7 +89,6 @@ Model::Model(RooRealVar* E, Data* na22, Data* lyso) : m_E(E),
   m_sig_peak_mean->setConstant(1);
   m_sig_peak_sigma->setVal(30);
   m_sig_peak_sigma->setConstant(1);
-  m_sig_yield->setVal(1500);
   m_sig_yield->setConstant(1);
   m_model = new RooAddPdf("totalPdf", "sum of signal and background PDF's", *shapes, *yields);
   
@@ -100,7 +96,18 @@ Model::Model(RooRealVar* E, Data* na22, Data* lyso) : m_E(E),
 
 RooFitResult* Model::Fit() 
 {
-  RooFitResult* fitRes = m_model->fitTo(*(m_Na22->m_dh), Extended(),Range("range_650_Max"));
+//   RooMsgService::instance().setSilentMode(true);
+  RooFitResult* fitRes = m_model->fitTo(*(m_Na22->m_dh), Extended(),Range("range_650_Max"), PrintEvalErrors(-1));
+  
+  double N2 = m_Na22->m_dh->sum(kFALSE);
+  double N1 = m_lyso_yield->getVal();
+  double Ndiff = N2 - N1;
+  
+  cout << "N1 (fitted LYSO) = " << N1 << endl;
+  cout << "N2 (Na22) = " << N2 << endl;
+  cout << "Ndiff = " << Ndiff << endl;
+  m_sig_yield->setVal(Ndiff*0.9);
+  
   TCanvas* c1 = new TCanvas();
   RooPlot* frame = m_E->frame(Bins(100));
   m_Na22->m_dh->plotOn(frame); //, DrawOption("PX"));
@@ -138,12 +145,9 @@ void Model::MakeCalculationsSensitivity()
   double N1_original = m_LYSO->m_dh->sum(kFALSE);
   double N1_original_err = sqrt(N1_original);
   cout << "N1_original = " << N1_original << " +- " << N1_original_err << endl;
-    	
-  RooAbsReal* sig_yield   = (RooAbsReal*) m_model->coefList().find("sig_yield");
-  RooAbsReal* lyso_yield  = (RooAbsReal*) m_model->coefList().find("lyso_yield");
- 
-  double N1 = lyso_yield->getVal();
-  double N2 = sig_yield->getVal();
+
+  double N1 = m_lyso_yield->getVal();
+  double N2 = m_sig_yield->getVal();
   double N1_err = N1_original_err * N1 / N1_original;
   cout << "N1 = " << N1 << " +- " << N1_err << endl;
   cout << "N2 = " << N2 << endl;
