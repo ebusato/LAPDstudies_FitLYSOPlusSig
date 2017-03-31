@@ -7,29 +7,34 @@ using namespace RooFit ;
 
 class Data {
 public:
-	Data(TTree* t);
-	RooDataHist* GetDataHistFromTH1(RooRealVar* var, string TH1Name, string histName);
+	Data(TTree* t, RooRealVar* E);
+	RooDataHist* GetDataHistFromTH1(string TH1Name, string histName);
 	double RunDuration();
 	
 	TTree* m_tree;
 	TCut m_cut;
+	
+	RooDataHist* m_dh;
+	RooRealVar* m_E;
 };
 
-Data::Data(TTree* t) : m_tree(t),
-		       m_cut("")
+Data::Data(TTree* t, RooRealVar* E) : m_tree(t),
+		       m_cut(""),
+		       m_dh(0),
+		       m_E(E)
 {}
 
-RooDataHist* Data::GetDataHistFromTH1(RooRealVar* var, string TH1Name, string histName)
+RooDataHist* Data::GetDataHistFromTH1(string TH1Name, string histName)
 {
-  TH1* h0 = new TH1F(TH1Name.c_str(), TH1Name.c_str(), var->getBinning().numBins(), var->getMin(), var->getMax());
+  TH1* h0 = new TH1F(TH1Name.c_str(), TH1Name.c_str(), m_E->getBinning().numBins(), m_E->getMin(), m_E->getMax());
   TString s0("E[0]>>");
   s0 += TH1Name.c_str();
   m_tree->Draw(s0.Data(), m_cut, "goff");
   
-  RooDataHist* dh = new RooDataHist(histName.c_str(), histName.c_str(), *var, Import(*h0));
-  cout << "no entries in RooDataHist " << histName << " = " << dh->sum(false) << endl;
+  m_dh = new RooDataHist(histName.c_str(), histName.c_str(), *m_E, Import(*h0));
+  cout << "no entries in RooDataHist " << histName << " = " << m_dh->sum(false) << endl;
   
-  return dh;
+  return m_dh;
 }
 
 // returns run duration in minutes
@@ -46,77 +51,94 @@ double Data::RunDuration()
   return (timeEnd - timeBeg)/60;
 }
 
-
-RooAddPdf* MakeModel(RooRealVar* E, RooDataHist* hist_LYSO)
-{
-  RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO", *E,*hist_LYSO,0);
-  RooRealVar* lyso_yield = new RooRealVar("lyso_yield", "yield of lyso", 100000, 0, 1000000);
- 
-  RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
-  RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
-  RooGaussian* sig_gaussian = new RooGaussian("sig_gaussian", "gaussian for signal peak", *E, *sig_peak_mean, *sig_peak_sigma);
-  RooRealVar* sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 1000000);
+class Model {
+public:
+  Model(RooRealVar* E, Data* na22, Data* lyso);
+  void MakeCalculationsSensitivity(int noEntries);
+  RooFitResult* Fit();
+  RooRealVar* m_lyso_yield;
+  RooRealVar* m_sig_yield;
+  RooRealVar* m_sig_peak_mean;
+  RooRealVar* m_sig_peak_sigma;
   
+  RooAddPdf* m_model;
+  
+  RooRealVar* m_E;
+  
+  Data* m_Na22;
+  Data* m_LYSO;
+};
+
+Model::Model(RooRealVar* E, Data* na22, Data* lyso) : m_E(E),
+						      m_Na22(na22),
+	     					      m_LYSO(lyso)
+{
+  m_lyso_yield = new RooRealVar("lyso_yield", "yield of lyso", 100000, 0, 1000000);
+  m_sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 1000000);
+  m_sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 511, 420, 610, "keV");
+  m_sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 40, 0, 90, "keV");
+	
+  cout << "here1 " << m_LYSO << " " << m_LYSO->m_dh << " " << m_E << endl;
+  RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO", *m_E,*(m_LYSO->m_dh),0);
+  cout << "here2" << endl;
+  RooGaussian* sig_gaussian = new RooGaussian("sig_gaussian", "gaussian for signal peak", *m_E, *m_sig_peak_mean, *m_sig_peak_sigma);
+   cout << "here3" << endl;
+   
   RooArgList* shapes = new RooArgList();
   RooArgList* yields = new RooArgList();
-  shapes->add(*histpdf_LYSO); yields->add(*lyso_yield);
-  shapes->add(*sig_gaussian);  yields->add(*sig_yield);
-  sig_peak_mean->setVal(508);
-  sig_peak_mean->setConstant(1);
-  sig_peak_sigma->setVal(30);
-  sig_peak_sigma->setConstant(1);
-  sig_yield->setVal(1500);
-  sig_yield->setConstant(1);
-  RooAddPdf* model = new RooAddPdf("totalPdf", "sum of signal and background PDF's", *shapes, *yields);
-  return model;
+  shapes->add(*histpdf_LYSO); yields->add(*m_lyso_yield);
+  shapes->add(*sig_gaussian);  yields->add(*m_sig_yield);
+  m_sig_peak_mean->setVal(508);
+  m_sig_peak_mean->setConstant(1);
+  m_sig_peak_sigma->setVal(30);
+  m_sig_peak_sigma->setConstant(1);
+  m_sig_yield->setVal(1500);
+  m_sig_yield->setConstant(1);
+  m_model = new RooAddPdf("totalPdf", "sum of signal and background PDF's", *shapes, *yields);
+  
 }
 
-/*
-TH1F* MakeHistoInRange(TH1F* h, double min, double max, bool setErrorsToZero=false)
+RooFitResult* Model::Fit() 
 {
-  TString newName(h->GetName());
-  newName += "_inRange";
-  int NbinsRange = h->GetXaxis()->FindBin(max) - h->GetXaxis()->FindBin(min) + 1;
-  double startVal = h->GetXaxis()->GetBinCenter(h->GetXaxis()->FindBin(min)) - h->GetXaxis()->GetBinWidth(h->GetXaxis()->FindBin(min))/2.;
-  double stopVal = h->GetXaxis()->GetBinCenter(h->GetXaxis()->FindBin(max)) + h->GetXaxis()->GetBinWidth(h->GetXaxis()->FindBin(max))/2.;
-  TH1F* hNew = new TH1F(newName.Data(), newName.Data(), NbinsRange, startVal, stopVal);
-  hNew->SetBinContent(0, 0);
-  hNew->SetBinContent(NbinsRange+1, 0);
-  for(int i = 1; i < NbinsRange + 1; ++i) {
-	  double val = hNew->GetXaxis()->GetBinCenter(i);
-	  int origHistoBin = h->GetXaxis()->FindBin(val);
-	  double binContent = h->GetBinContent(origHistoBin);
-	  double binError = h->GetBinError(origHistoBin);
-	  //cout << i << "  " << origHistoBin<< "  " << val << "  " << binContent << "  " << binError << endl;
-	  hNew->SetBinContent(i, binContent);
-	  if(!setErrorsToZero) {
-		hNew->SetBinError(i, binError);
-	  }
-  }
-  hNew->SetMarkerColor(kRed);
-  hNew->SetLineColor(kRed);
-  return hNew;
+  RooFitResult* fitRes = m_model->fitTo(*(m_Na22->m_dh), Extended(),Range("range_650_Max"));
+  TCanvas* c1 = new TCanvas();
+  RooPlot* frame = m_E->frame(Bins(100));
+  m_Na22->m_dh->plotOn(frame); //, DrawOption("PX"));
+  m_model->plotOn(frame, Range("range_whole"));
+  m_model->plotOn(frame, Range("range_whole"), Components("sig_gaussian"),LineColor(kRed));
+  m_model->plotOn(frame, Range("range_whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
+  m_Na22->m_dh->plotOn(frame); //, DrawOption("PX"));
+  frame->Draw();
+  double xText = 0.55;
+  double yShift = 0.07;
+  PutText(xText, 0.81, kBlack, "LAPD");
+ // PutText(xText, 0.85-yShift, kBlack, "LPC");
+  PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (16 kBq)");
+  stringstream ss;
+  ss.precision(3);
+  ss << "Run duration: " << m_Na22->RunDuration() << " min";
+  PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
+  return fitRes;
 }
-*/
 
-void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRealVar* E, int noEntries)
+void MakeOTHinput(TString fileName, double LYSO_yield, double LYSO_yieldErr, double Na22_yield)
 {
-  double signalWindow_min = 450;
-  double signalWindow_max = 570;
+  ofstream of(fileName.Data());
+  of << "+bg LYSO " << LYSO_yield << " " << LYSO_yieldErr << endl << endl;
+  of << "+sig Sig " << Na22_yield << endl << endl;
+  of << "+data " << LYSO_yield + Na22_yield << endl;
+}
 
-
-//   double signalWindow_min = 900;
-//   double signalWindow_max = 1100;
-  E->setRange("signalWindow", signalWindow_min, signalWindow_max) ;
-
+void Model::MakeCalculationsSensitivity(int noEntries)
+{
   // Analytical stuff
  
-  double N1_original = hist_LYSO->sum(kFALSE);
+  double N1_original = m_LYSO->m_dh->sum(kFALSE);
   double N1_original_err = sqrt(N1_original);
   cout << "N1_original = " << N1_original << " +- " << N1_original_err << endl;
     	
-  RooAbsReal* sig_yield   = (RooAbsReal*) model->coefList().find("sig_yield");
-  RooAbsReal* lyso_yield  = (RooAbsReal*) model->coefList().find("lyso_yield");
+  RooAbsReal* sig_yield   = (RooAbsReal*) m_model->coefList().find("sig_yield");
+  RooAbsReal* lyso_yield  = (RooAbsReal*) m_model->coefList().find("lyso_yield");
  
   double N1 = lyso_yield->getVal();
   double N2 = sig_yield->getVal();
@@ -129,10 +151,10 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
   // Calculation of z (significance)
   
   // Used to compute selection efficiency of E[0] \in signalWindow
-  RooAbsPdf* sig_gaussian = (RooAbsPdf*) model->pdfList().find("sig_gaussian");
-  RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) model->pdfList().find("histpdf_LYSO");
-  RooAbsReal* igx_sig = sig_gaussian->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
-  RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*E,NormSet(*E),Range("signalWindow")) ;
+  RooAbsPdf* sig_gaussian = (RooAbsPdf*) m_model->pdfList().find("sig_gaussian");
+  RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) m_model->pdfList().find("histpdf_LYSO");
+  RooAbsReal* igx_sig = sig_gaussian->createIntegral(*m_E,NormSet(*m_E),Range("signalWindow")) ;
+  RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*m_E,NormSet(*m_E),Range("signalWindow")) ;
   double int_sig_window = igx_sig->getVal();
   double int_lyso_window = igx_lyso->getVal();
   cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
@@ -191,7 +213,7 @@ void MakeCalculationsSensitivity(RooDataHist* hist_LYSO, RooAddPdf* model, RooRe
 
   // OTH stuff
   /*
-  TH1F* hLYSO_gen = (TH1F*) hist_LYSO->createHistogram("E");
+  TH1F* hLYSO_gen = (TH1F*) m_LYSO.m_dh->createHistogram("E");
   hLYSO_gen->Sumw2();
   
   //hLYSO_gen->Scale(lyso_yield->getVal()/hLYSO_gen->Integral());
@@ -232,13 +254,41 @@ hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
 //   hData_gen_range->Write();
 //   f->Write();
 //   f->Close();
-  
-  ofstream of("OTHinput/inputYield.dat");
-  of << "+bg LYSO " << N1primeWindow << " " << N1primeErrorWindow << endl << endl;
-  of << "+sig Sig " << N2primeWindow << endl << endl;
-  of << "+data " << N1prime*int_lyso_window + N2prime*int_sig_window << endl;
+
+  MakeOTHinput("OTHinput/inputYield.dat", N1primeWindow, N1primeErrorWindow, N2primeWindow);
   system("root -l -b -q load.C 'runSignificance.C(\"OTHinput/inputYield.dat\")'");
 }
+
+
+
+/*
+TH1F* MakeHistoInRange(TH1F* h, double min, double max, bool setErrorsToZero=false)
+{
+  TString newName(h->GetName());
+  newName += "_inRange";
+  int NbinsRange = h->GetXaxis()->FindBin(max) - h->GetXaxis()->FindBin(min) + 1;
+  double startVal = h->GetXaxis()->GetBinCenter(h->GetXaxis()->FindBin(min)) - h->GetXaxis()->GetBinWidth(h->GetXaxis()->FindBin(min))/2.;
+  double stopVal = h->GetXaxis()->GetBinCenter(h->GetXaxis()->FindBin(max)) + h->GetXaxis()->GetBinWidth(h->GetXaxis()->FindBin(max))/2.;
+  TH1F* hNew = new TH1F(newName.Data(), newName.Data(), NbinsRange, startVal, stopVal);
+  hNew->SetBinContent(0, 0);
+  hNew->SetBinContent(NbinsRange+1, 0);
+  for(int i = 1; i < NbinsRange + 1; ++i) {
+	  double val = hNew->GetXaxis()->GetBinCenter(i);
+	  int origHistoBin = h->GetXaxis()->FindBin(val);
+	  double binContent = h->GetBinContent(origHistoBin);
+	  double binError = h->GetBinError(origHistoBin);
+	  //cout << i << "  " << origHistoBin<< "  " << val << "  " << binContent << "  " << binError << endl;
+	  hNew->SetBinContent(i, binContent);
+	  if(!setErrorsToZero) {
+		hNew->SetBinError(i, binError);
+	  }
+  }
+  hNew->SetMarkerColor(kRed);
+  hNew->SetLineColor(kRed);
+  return hNew;
+}
+*/
+
 
 RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
 {
@@ -248,6 +298,11 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
   E->setRange("range_400_Max", 400, E->getMax());
   E->setRange("range_450_Max", 450, E->getMax());
   E->setRange("range_650_Max", 650, E->getMax());
+  double signalWindow_min = 450;
+  double signalWindow_max = 570;
+//   double signalWindow_min = 900;
+//   double signalWindow_max = 1100;
+  E->setRange("range_sigWindow", signalWindow_min, signalWindow_max) ;
   
   TFile* f_LYSO = new TFile(lysoFile.c_str());
   TTree* t_LYSO = (TTree*) f_LYSO->Get("tree");
@@ -255,39 +310,20 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
   TFile* f_Na22 = new TFile(na22File.c_str());
   TTree* t_Na22 = (TTree*) f_Na22->Get("tree");
  
-  Data* dataLYSO = new Data(t_LYSO);
-  Data* dataNa22 = new Data(t_Na22);
+  Data* dataLYSO = new Data(t_LYSO, E);
+  Data* dataNa22 = new Data(t_Na22, E);
 
   dataLYSO->m_cut = "";
   dataNa22->m_cut = "Evt < 50000 && Sat[0] == 0";
   
-  RooDataHist* hist_LYSO = dataLYSO->GetDataHistFromTH1(E, "hE_lyso", "dhE_lyso");
-  RooDataHist* hist_Na22 = dataNa22->GetDataHistFromTH1(E, "hE_data", "dhE_data");
+  RooDataHist* hist_LYSO = dataLYSO->GetDataHistFromTH1("hE_lyso", "dhE_lyso");
+  RooDataHist* hist_Na22 = dataNa22->GetDataHistFromTH1("hE_data", "dhE_data");
   
-  RooAddPdf* model = MakeModel(E, hist_LYSO);
+  Model* model = new Model(E, dataNa22, dataLYSO);
  
-  int noEntries = t_Na22->GetEntries();
-
-//   E->setRange("fitRange", 800, E->getMax());
-  RooFitResult* fitRes = model->fitTo(*hist_Na22, Extended(),Range("range_650_Max"));
-  TCanvas* c1 = new TCanvas();
-  RooPlot* frame = E->frame(Bins(100));
-  hist_Na22->plotOn(frame); //, DrawOption("PX"));
-  model->plotOn(frame, Range("range_whole"));
-  model->plotOn(frame, Range("range_whole"), Components("sig_gaussian"),LineColor(kRed));
-  model->plotOn(frame, Range("range_whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
-  hist_Na22->plotOn(frame); //, DrawOption("PX"));
-  frame->Draw();
-  double xText = 0.55;
-  double yShift = 0.07;
-  PutText(xText, 0.81, kBlack, "LAPD");
- // PutText(xText, 0.85-yShift, kBlack, "LPC");
-  PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (16 kBq)");
-  stringstream ss;
-  ss.precision(3);
-  ss << "Run duration: " << dataNa22->RunDuration() << " min";
-  PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
+  model->Fit();
   
+  //int noEntries = t_Na22->GetEntries();
   //MakeCalculationsSensitivity(hist_LYSO, model, E, noEntries);
   return 0;
 }
