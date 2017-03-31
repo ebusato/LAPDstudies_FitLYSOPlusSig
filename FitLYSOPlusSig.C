@@ -54,7 +54,7 @@ double Data::RunDuration()
 class Model {
 public:
   Model(RooRealVar* E, Data* na22, Data* lyso);
-  void MakeCalculationsSensitivity(int noEntries);
+  void MakeCalculationsSensitivity();
   RooFitResult* Fit();
   RooRealVar* m_lyso_yield;
   RooRealVar* m_sig_yield;
@@ -129,10 +129,12 @@ void MakeOTHinput(TString fileName, double LYSO_yield, double LYSO_yieldErr, dou
   of << "+data " << LYSO_yield + Na22_yield << endl;
 }
 
-void Model::MakeCalculationsSensitivity(int noEntries)
+void Model::MakeCalculationsSensitivity()
 {
   // Analytical stuff
  
+  int noEntries = m_Na22->m_tree->GetEntries();
+	
   double N1_original = m_LYSO->m_dh->sum(kFALSE);
   double N1_original_err = sqrt(N1_original);
   cout << "N1_original = " << N1_original << " +- " << N1_original_err << endl;
@@ -314,17 +316,15 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
   Data* dataNa22 = new Data(t_Na22, E);
 
   dataLYSO->m_cut = "";
-  dataNa22->m_cut = "Evt < 50000 && Sat[0] == 0";
+  dataNa22->m_cut = "Evt < 5000 && Sat[0] == 0";
   
   RooDataHist* hist_LYSO = dataLYSO->GetDataHistFromTH1("hE_lyso", "dhE_lyso");
   RooDataHist* hist_Na22 = dataNa22->GetDataHistFromTH1("hE_data", "dhE_data");
   
   Model* model = new Model(E, dataNa22, dataLYSO);
- 
   model->Fit();
+  model->MakeCalculationsSensitivity();
   
-  //int noEntries = t_Na22->GetEntries();
-  //MakeCalculationsSensitivity(hist_LYSO, model, E, noEntries);
   return 0;
 }
 
