@@ -54,9 +54,10 @@ double Data::RunDuration()
 
 class Model {
 public:
-  Model(RooRealVar* E, Data* na22, Data* lyso);
-  void MakeCalculationsSensitivity();
-  RooFitResult* Fit();
+  Model(RooRealVar* E, Data* lyso, RooAbsPdf* sig_gaussian);
+  void MakeCalculationsSensitivity(Data* data);
+  RooFitResult* Fit(Data* data);
+  void Plot(Data* data);
   RooRealVar* m_lyso_yield;
   RooRealVar* m_sig_yield;
   RooRealVar* m_sig_peak_mean;
@@ -66,7 +67,6 @@ public:
   
   RooRealVar* m_E;
   
-  Data* m_Na22;
   Data* m_LYSO;
 };
 
@@ -94,101 +94,51 @@ public:
 //   m_model = new RooAddPdf("totalPdf", "sum of signal and background PDF's", *shapes, *yields);
 //   
 // }
-// 
-// RooFitResult* Model::Fit() 
-// {
-// //   RooMsgService::instance().setSilentMode(true);
-//    RooFitResult* fitRes = m_model->fitTo(*(m_Na22->m_dh), Extended(),Range("range_650_Max"), PrintEvalErrors(-1));
-//   double N2 = m_Na22->m_dh->sum(kFALSE);
-//   double N1 = m_lyso_yield->getVal();
-//   double Ndiff = N2 - N1;
-//   
-//   cout << "N1 (fitted LYSO) = " << N1 << endl;
-//   cout << "N2 (Na22) = " << N2 << endl;
-//   cout << "Ndiff = " << Ndiff << endl;
-//   m_sig_yield->setVal(Ndiff*0.9);
-//   
-//   
-//   TCanvas* c1 = new TCanvas();
-//   RooPlot* frame = m_E->frame(Bins(100));
-//   m_Na22->m_dh->plotOn(frame); //, DrawOption("PX"));
-//   m_model->plotOn(frame, Range("range_whole"));
-//   m_model->plotOn(frame, Range("range_whole"), Components("sig_gaussian"),LineColor(kRed));
-//   m_model->plotOn(frame, Range("range_whole"), Components("histpdf_LYSO"),LineColor(kGreen+2));
-//   m_Na22->m_dh->plotOn(frame); //, DrawOption("PX"));
-//   frame->Draw();
-//   double xText = 0.55;
-//   double yShift = 0.07;
-//   PutText(xText, 0.81, kBlack, "LAPD");
-//  // PutText(xText, 0.85-yShift, kBlack, "LPC");
-//   PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (16 kBq)");
-//   stringstream ss;
-//   ss.precision(3);
-//   ss << "Run duration: " << m_Na22->RunDuration() << " min";
-//   PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
-//  
-//  return fitRes;
-// }
 
-Model::Model(RooRealVar* E, Data* na22, Data* lyso) : m_E(E),
-						      m_Na22(na22),
-	     					      m_LYSO(lyso)
+Model::Model(RooRealVar* E, Data* lyso, RooAbsPdf* sig_gaussian) : m_E(E),
+	     				  m_LYSO(lyso)
 {
   m_lyso_yield = new RooRealVar("lyso_yield", "yield of lyso", 100000, 0, 1000000);
   m_sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 1000000);
-	
-  RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO", *m_E,*(m_LYSO->m_dh),0);
   
-  TH1F* h = new TH1F("h", "h", 150, 0, 1200);
-  TFile* fNa22Simu = new TFile("../../Data/G4/MakeCrystalsFromHits_Na22_Plot4_source.root", "read");
-  TTree* treeNa22Simu = (TTree*) fNa22Simu->Get("tree");
-          TTreeReader reader(treeNa22Simu);
-        TTreeReaderArray<Double_t> Edep(reader, "EdepSmeared_Constant");
-  while (reader.Next()) {
-	  if(Edep[0]>0) {// && Edep[0] < 0.600){
-	 h->Fill(Edep[0]*1e3); 
-	  }
-  }
-  
-//   TCanvas* ctemp = new TCanvas("ctemp", "ctemp");
-//   treeNa22Simu->Draw("1000*EdepSmeared_Constant[0]>>h", "EdepSmeared_Constant[0] > 0", "");
-//   TH1F* h = (TH1F*) gDirectory->Get("h");
-  h->Draw();
-  
-  RooDataHist* hist_Na22 = new RooDataHist("dhE_sig", "dhE_sig", *m_E, Import(*h));
-  RooHistPdf* sig_gaussian = new RooHistPdf("sig_gaussian","sig_gaussian", *m_E,*hist_Na22,0);
+  RooDataHist* hist_LYSO = lyso->GetDataHistFromTH1("hE_lyso", "dhE_lyso");
+  RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO", *m_E,*hist_LYSO,0);
    
   RooArgList* shapes = new RooArgList();
   RooArgList* yields = new RooArgList();
   shapes->add(*histpdf_LYSO); yields->add(*m_lyso_yield);
-//    shapes->add(*sig_gaussian);  yields->add(*m_sig_yield);
+  shapes->add(*sig_gaussian);  yields->add(*m_sig_yield);
   m_model = new RooAddPdf("totalPdf", "sum of signal and background PDF's", *shapes, *yields);
   
   cout << "here end" << endl;
 }
 
-RooFitResult* Model::Fit() 
+RooFitResult* Model::Fit(Data* data) 
 {
-//   RooMsgService::instance().setSilentMode(true);
-  RooFitResult* fitRes;
-	fitRes = m_model->fitTo(*(m_Na22->m_dh), Extended(),Range("range_650_850"), PrintEvalErrors(-1));
-//   double N2 = m_Na22->m_dh->sum(kFALSE);
-//   double N1 = m_lyso_yield->getVal();
-//   double Ndiff = N2 - N1;
-//   
-//   cout << "N1 (fitted LYSO) = " << N1 << endl;
-//   cout << "N2 (Na22) = " << N2 << endl;
-//   cout << "Ndiff = " << Ndiff << endl;
-//   m_lyso_yield->setVal(3500);
-//   m_sig_yield->setVal(1000);
+  if(data->m_dh == 0) {
+    data->GetDataHistFromTH1("hE_data", "dhE_data");
+  }
   
+//   RooMsgService::instance().setSilentMode(true);
+  RooFitResult* fitRes = m_model->fitTo(*(data->m_dh), Extended(),Range("range_650_Max"), PrintEvalErrors(-1));
+ return fitRes;
+}
+
+void Model::Plot(Data* data) 
+{
+  double N2 = data->m_dh->sum(kFALSE);
+  double N1 = m_lyso_yield->getVal();
+  double Ndiff = N2 - N1;
+
+  m_sig_yield->setVal(0.9*Ndiff);
+
   TCanvas* c1 = new TCanvas();
   RooPlot* frame = m_E->frame(Bins(100));
-  m_Na22->m_dh->plotOn(frame); //, DrawOption("PX"));
- m_model->plotOn(frame, Range("range_250_Max"));
-  m_model->plotOn(frame, Components("sig_gaussian"),LineColor(kRed));
-m_model->plotOn(frame, Range("range_200_Max"), Components("histpdf_LYSO"),LineColor(kGreen+2));
-  m_Na22->m_dh->plotOn(frame); //, DrawOption("PX"));
+  data->m_dh->plotOn(frame); //, DrawOption("PX"));
+  m_model->plotOn(frame, Range("range_250_Max"));
+  m_model->plotOn(frame, Range("range_250_Max"), Components("sig_gaussian"),LineColor(kRed));
+  m_model->plotOn(frame, Range("range_200_Max"), Components("histpdf_LYSO"),LineColor(kGreen+2));
+  data->m_dh->plotOn(frame); //, DrawOption("PX"));
   frame->Draw();
  
   double xText = 0.55;
@@ -198,9 +148,8 @@ m_model->plotOn(frame, Range("range_200_Max"), Components("histpdf_LYSO"),LineCo
   PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (16 kBq)");
   stringstream ss;
   ss.precision(3);
-  ss << "Run duration: " << m_Na22->RunDuration() << " min";
+  ss << "Run duration: " << data->RunDuration() << " min";
   PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
- return fitRes;
 }
 
 void MakeOTHinput(TString fileName, double LYSO_yield, double LYSO_yieldErr, double Na22_yield)
@@ -211,11 +160,11 @@ void MakeOTHinput(TString fileName, double LYSO_yield, double LYSO_yieldErr, dou
   of << "+data " << LYSO_yield + Na22_yield << endl;
 }
 
-void Model::MakeCalculationsSensitivity()
+void Model::MakeCalculationsSensitivity(Data* data)
 {
   // Analytical stuff
  
-  int noEntries = m_Na22->m_tree->GetEntries();
+  int noEntries = data->m_tree->GetEntries();
 	
   double N1_original = m_LYSO->m_dh->sum(kFALSE);
   double N1_original_err = sqrt(N1_original);
@@ -371,7 +320,7 @@ TH1F* MakeHistoInRange(TH1F* h, double min, double max, bool setErrorsToZero=fal
 */
 
 
-RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
+RooFitResult* FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
   E->setBins(150);
@@ -381,7 +330,7 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
   E->setRange("range_400_Max", 400, E->getMax());
   E->setRange("range_450_Max", 450, E->getMax());
   E->setRange("range_650_Max", 650, E->getMax());
-  E->setRange("range_650_850", 650, 850);
+  E->setRange("range_650_900", 650, 900);
   double signalWindow_min = 450;
   double signalWindow_max = 570;
 //   double signalWindow_min = 900;
@@ -391,20 +340,43 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
   TFile* f_LYSO = new TFile(lysoFile.c_str());
   TTree* t_LYSO = (TTree*) f_LYSO->Get("tree");
   
-  TFile* f_Na22 = new TFile(na22File.c_str());
-  TTree* t_Na22 = (TTree*) f_Na22->Get("tree");
+  TFile* fData = new TFile(dataFile.c_str());
+  TTree* tData = (TTree*) fData->Get("tree");
  
   Data* dataLYSO = new Data(t_LYSO, E);
-  Data* dataNa22 = new Data(t_Na22, E);
+  Data* data = new Data(tData, E);
 
   dataLYSO->m_cut = "";
-  dataNa22->m_cut = "Evt < 10000";
+  data->m_cut = "Evt < 15000 && Sat[0] == 0";
   
-  RooDataHist* hist_LYSO = dataLYSO->GetDataHistFromTH1("hE_lyso", "dhE_lyso");
-  RooDataHist* hist_Na22 = dataNa22->GetDataHistFromTH1("hE_data", "dhE_data");
+  RooAbsPdf* sig_gaussian;
+  if(na22FromSimu) {
+    ////////////////////////////////////////////////////////////////////////////////
+    // Na22 model from G4
+    TH1F* h = new TH1F("h", "h", 150, 0, 1200);
+    TFile* fNa22Simu = new TFile("../../Data/G4/MakeCrystalsFromHits_Na22_Plot4_source.root", "read");
+    TTree* treeNa22Simu = (TTree*) fNa22Simu->Get("tree");
+    TTreeReader reader(treeNa22Simu);
+    TTreeReaderArray<Double_t> Edep(reader, "EdepSmeared_Constant");
+    while (reader.Next()) {
+      if(Edep[0]>0) {// && Edep[0] < 0.600){
+       h->Fill(Edep[0]*1e3); 
+      }
+    }
+    h->Draw();
   
-  Model* model = new Model(E, dataNa22, dataLYSO);
-  model->Fit();
+    RooDataHist* hist_Na22 = new RooDataHist("dhE_sig", "dhE_sig", *E, Import(*h));
+    sig_gaussian = new RooHistPdf("sig_gaussian","sig_gaussian", *E,*hist_Na22,0);
+  } else {
+    RooRealVar* sig_peak_mean = new RooRealVar("sig_peak_mean", "mean of gaussian for signal peak", 507, "keV");
+    RooRealVar* sig_peak_sigma = new RooRealVar("sig_peak_sigma", "width of gaussian for signal peak", 32, "keV");
+
+    sig_gaussian = new RooGaussian("sig_gaussian", "gaussian for signal peak", *E, *sig_peak_mean, *sig_peak_sigma);
+  }
+  
+  Model* model = new Model(E, dataLYSO, sig_gaussian);
+  model->Fit(data);
+  model->Plot(data);
 //   model->MakeCalculationsSensitivity();
   
   return 0;
@@ -412,9 +384,5 @@ RooFitResult* FitLYSOPlusSig(string na22File, string lysoFile)
 
 void FitLYSOPlusSig()
 {
-//   FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
-  FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root");
-  
-  //FitLYSOPlusSig("~/Travail/Imaging/serverAvirm/DPGA/DataBackup/godaq_rootfiles/analysis_v2.10.0/run63.root", 
-//"~/Travail/Imaging/serverAvirm/DPGA/DataBackup/godaq_rootfiles/analysis_v2.10.0/run78.root");
+  FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root", false);
 }
