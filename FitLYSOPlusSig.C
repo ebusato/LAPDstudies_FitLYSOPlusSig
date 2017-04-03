@@ -274,6 +274,35 @@ void SetGraphStyle(TGraph* g, int markerStyle, int markerSize, int color) {
 	g->SetMarkerColor(color);
 }
 
+std::pair<TGraph*, TGraph*> Result::MakeGraphAroundAlpha(double alpha) 
+{
+  int n = 7;
+  TGraph* gAnal = new TGraph(n);
+  TGraph* gOTH = new TGraph(n);
+  
+  for(int i = 0; i < n; i++) {
+    double alphaprime = 0;
+    if(i <= n/2) {
+      alphaprime = alpha/(n/2.-i+1);
+    } else {
+	alphaprime = (i-n/2.+1)*alpha;    
+    }
+    Restore();
+    RescaleActivity(alphaprime);
+    ApplyEff(eff_signal, eff_lyso);
+    std::pair<double, double> z = CalcZ("OTHinput/inputYield.dat");
+    cout << "zAnal, zOTH = " << z.first << " " << z.second << endl;
+    gAnal->SetPoint(i, m_activity, z.first);
+    gOTH->SetPoint(i, m_activity, z.second);
+  
+  }
+
+  SetGraphStyle(gAnal, 8, 2, kBlack);
+  SetGraphStyle(gOTH, 4, 1, kRed);
+return std::make_pair(gAnal, gOTH);
+  
+}
+
 void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
@@ -337,13 +366,12 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
 
-  res->RescaleActivity(alpha);
-  res->ApplyEff(eff_signal, eff_lyso);
   
-  std::pair<double, double> z = res->CalcZ("OTHinput/inputYield.dat");
-  cout << "zAnal, zOTH = " << z.first << " " << z.second << endl;
-  
-  
+  std::pair<TGraph*, TGraph*> graphs = res->MakeGraphAroundAlpha(alpha);
+  TMultiGraph* multi = new TMultiGraph();
+  multi->Add(graphs.first);
+  multi->Add(graphs.second);
+  multi->Draw("ap");
   
   /*
   int Npoints = 5;

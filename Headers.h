@@ -25,6 +25,7 @@ public:
 	void RescaleActivity(double factor);
 	void RescaleTime(double factor);
 	void Restore();
+	std::pair<TGraph*, TGraph*> MakeGraphAroundAlpha(double alpha);
 	void Print();
 	
 	double SigRate() {return m_Nsig/m_time/60.;}
