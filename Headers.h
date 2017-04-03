@@ -19,13 +19,16 @@ class Result {
 public:
 	Result(double time, double activity, double Nsig, double Nlyso, double NlysoOrig);
 	void WriteOTHFile(TString fileName);
-	double CalcZoth(TString fileName);
-	double CalcZanal();
+	void ApplyEff(double effSig, double effLyso);
+	double SolveForAlpha(double Z=3.);
+	std::pair<double, double> CalcZ(TString fileName);
 	void RescaleActivity(double factor);
 	void RescaleTime(double factor);
-	void RescaleActivityAndTime(double factorAct, double factorTime);
-	void MakeCalculationsSensitivity(Data* data);
+	void Restore();
 	void Print();
+	
+	double SigRate() {return m_Nsig/m_time/60.;}
+	double LysoRate() {return m_Nlyso/m_time/60.;}
 	
 	double m_time;
 	double m_activity;

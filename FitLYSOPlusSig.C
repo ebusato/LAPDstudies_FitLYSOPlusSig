@@ -9,7 +9,26 @@
 
 using namespace RooFit ;
 
+// Used to compute selection efficiency of E[0] \in signalWindow
+//   RooAbsPdf* sig_gaussian = (RooAbsPdf*) m_model->pdfList().find("sig_gaussian");
+//   RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) m_model->pdfList().find("histpdf_LYSO");
+//   RooAbsReal* igx_sig = sig_gaussian->createIntegral(*m_E,NormSet(*m_E),Range("signalWindow")) ;
+//   RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*m_E,NormSet(*m_E),Range("signalWindow")) ;
+//   double int_sig_window = igx_sig->getVal();
+//   double int_lyso_window = igx_lyso->getVal();
+//   cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
+//   cout << "int[E|LYSO]_Norm[E] = " << int_lyso_window << endl;
 
+// Alternative selection cut: E[0] > 425 && E[0] < 595 && E[1] > 425 && E[1] < 595 && fabs(T30[0] - T30[1]) < 3.6
+// We assume that this cut selects 50% of the signal (rough estimation, this needs to be estimated on simulation)
+// On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 0.0033... (without this cut we have 800000 events in E[0]>>h histogram,
+// and with the cut we have 2666 events)
+// Try to improve by also cutting on CTR
+double eff_signal = 0.5;
+double eff_lyso = 0.0034;
+
+double peakEff = 0.9;
+  
 Data::Data(TTree* t, RooRealVar* E) : m_tree(t),
 		       m_cut(""),
 		       m_dh(0),
@@ -74,6 +93,7 @@ Result* Model::Fit(Data* data)
     data->GetDataHistFromTH1("hE_data", "dhE_data");
   }
   
+  m_sig_yield->setConstant();
 //   RooMsgService::instance().setSilentMode(true);
  m_model->fitTo(*(data->m_dh), Extended(),Range("range_650_Max"), PrintEvalErrors(-1));
  
@@ -83,8 +103,6 @@ Result* Model::Fit(Data* data)
 
 void Model::Plot(Data* data, Result* res, bool plotData)
 {
-  double peakEff = 0.9;
-
   m_sig_yield->setVal(peakEff*res->m_Nsig);
   m_lyso_yield->setVal(res->m_Nlyso);
   
@@ -168,6 +186,28 @@ void Result::Print()
 	cout << "  -> rate tot = " << rateSig+rateLyso << endl; 
 }
 
+double Result::SolveForAlpha(double Z) 
+{  
+  double mSig = SigRate();
+  double poly_a = m_Nsig*m_Nsig;
+  double poly_b = -1*Z*Z*m_Nlyso*mSig*m_deadTime;
+  double poly_c = Z*Z*m_Nlyso*(mSig*m_deadTime - 1);
+  double delta = poly_b*poly_b - 4*poly_a*poly_c;
+  cout << "delta = " << delta << endl;
+  double solplus = (-poly_b + sqrt(delta))/(2*poly_a);
+  double solminus = (-poly_b - sqrt(delta))/(2*poly_a);
+  cout << "sol+ = " << solplus << endl;
+  cout << "sol- = " << solminus << endl;
+  
+  return solplus;
+}
+
+void Result::ApplyEff(double effSig, double effLyso)
+{
+  m_Nsig *= effSig;
+  m_Nlyso *= effLyso;
+}
+
 void Result::WriteOTHFile(TString fileName) 
 {
   ofstream of(fileName.Data());
@@ -177,16 +217,17 @@ void Result::WriteOTHFile(TString fileName)
   of << "+data " << m_Nsig + m_Nlyso << endl;
 }
 
-double Result::CalcZoth(TString fileName)
+std::pair<double, double> Result::CalcZ(TString fileName)
 {
-	/*
+  /*
   TString cmd("root -l -b -q load.C 'runSignificance.C(\"");
   cmd += fileName;
   cmd += "\")'";
   cout << "Command is: " << cmd.Data() << endl;
   system(cmd.Data());
   */
-	
+  
+  WriteOTHFile("OTHinput/inputYield.dat");
   OpTHyLiC oth(OTH::SystPolyexpo,OTH::StatLogN);
   oth.addChannel("ch1",fileName.Data());
   const int Nexp=5e5;
@@ -194,168 +235,38 @@ double Result::CalcZoth(TString fileName)
 //    std::pair<double, double> s = oth.significance(OTH::SignifObserved,Nexp);
   const double p=s.first;
   const double z=s.second;
-
-  return z;
-}
-
-double Result::CalcZanal()
-{
-  double N1 = m_Nlyso;
-  double N2 = m_Nsig;
-  return N2/sqrt(N1);
+  
+  return std::make_pair(m_Nsig/sqrt(m_Nlyso), z);
 }
 
 void Result::RescaleActivity(double factor) {
   // compute rates in sec-1
-  double mLYSO = m_NlysoOrig / m_timeOrig / 60.;
-  double mSig = m_NsigOrig / m_timeOrig / 60.;
+  double mLYSO = m_Nlyso / m_time / 60.;
+  double mSig = m_Nsig / m_time / 60.;
   
   // compute rescaled quantities
   double mLYSOprime = mLYSO / (1+mSig*m_deadTime*(factor-1));
   double mSigprime = factor*mSig / (1+mSig*m_deadTime*(factor-1));
   
-  m_activity = m_activityOrig * factor;
-  m_Nlyso = mLYSOprime*m_timeOrig*60;
-  m_Nsig = mSigprime*m_timeOrig*60;
+  m_activity = m_activity * factor;
+  m_Nlyso = mLYSOprime*m_time*60;
+  m_Nsig = mSigprime*m_time*60;
 }
 
 void Result::RescaleTime(double factor) {
-  m_Nlyso = m_NlysoOrig * factor;
-  m_Nsig = m_NsigOrig * factor;
-  m_time = m_timeOrig * factor;
+  m_Nlyso *= factor;
+  m_Nsig *= factor;
+  m_time *= factor;
 }
 
-void Result::RescaleActivityAndTime(double factorAct, double factorTime) {
-  RescaleActivity(factorAct);
-  m_Nlyso = m_Nlyso*factorTime;
-  m_Nsig = m_Nsig*factorTime;
-  m_time = m_timeOrig*factorTime;
-}
-
-/*
-void Result::MakeCalculationsSensitivity(Data* data)
+void Result::Restore()
 {
-  // Analytical stuff
-
-  int noEntries = data->m_tree->GetEntries();
-  double N1_original = m_NlysoOrig;
-  double N1_original_err = sqrt(m_NlysoOrig);
-  double N1 = m_Nlyso;
-  double N2 = m_Nsig;
-  double N1_err = N1_original_err * N1 / N1_original;
-  cout << "N1 = " << N1 << " +- " << N1_err << endl;
-  cout << "N2 = " << N2 << endl;
-  cout << "N2/N1 = " << N2 / N1 << endl;
-
-  ///////////////////////////////////////////////////////////
-  // Calculation of z (significance)
-  
-  // Used to compute selection efficiency of E[0] \in signalWindow
-  RooAbsPdf* sig_gaussian = (RooAbsPdf*) m_model->pdfList().find("sig_gaussian");
-  RooAbsPdf* histpdf_LYSO = (RooAbsPdf*) m_model->pdfList().find("histpdf_LYSO");
-  RooAbsReal* igx_sig = sig_gaussian->createIntegral(*m_E,NormSet(*m_E),Range("signalWindow")) ;
-  RooAbsReal* igx_lyso = histpdf_LYSO->createIntegral(*m_E,NormSet(*m_E),Range("signalWindow")) ;
-  double int_sig_window = igx_sig->getVal();
-  double int_lyso_window = igx_lyso->getVal();
-  cout << "int[E|signal]_Norm[E] = " << int_sig_window << endl;
-  cout << "int[E|LYSO]_Norm[E] = " << int_lyso_window << endl;
-  
-  // Alternative selection cut: E[0] > 425 && E[0] < 595 && E[1] > 425 && E[1] < 595 && fabs(T30[0] - T30[1]) < 3.6
-  // We assume that this cut selects 50% of the signal (rough estimation, this needs to be estimated on simulation)
-  // On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 0.0033...% (without this cut we have 800000 events in E[0]>>h histogram,
-  // and with the cut we have 2666 events)
-  // Try to improve by also cutting on CTR
-   int_sig_window = 0.5;
-   int_lyso_window = 0.0034;
-  
-   double Z = 3.*sqrt(int_lyso_window)/int_sig_window;
-  ///////////////////////////////////////////////////////////
-  
-  double time = float(noEntries)/24; // around 24 Hz, to be adjusted
-  double tau = 41.e-3; // dead time around 40 ms, to be adjusted
-  double m2 = N2/time;
-  double poly_a = N2*N2;
-  double poly_b = -1*Z*Z*N1*m2*tau;
-  double poly_c = Z*Z*N1*(m2*tau - 1);
-  double delta = poly_b*poly_b - 4*poly_a*poly_c;
-  cout << "delta = " << delta << endl;
-  double solplus = (-poly_b + sqrt(delta))/(2*poly_a);
-  double solminus = (-poly_b - sqrt(delta))/(2*poly_a);
-  cout << "sol+ = " << solplus << endl;
-  cout << "sol- = " << solminus << endl;
-  
-  ///////////////////////////////////////////////////////////////
-  // not used, just to know the values
-  double N2_window = int_sig_window * N2;
-  double N1_window = int_lyso_window * N1;
-  double N1_window_err = N1_err * int_lyso_window;
-  cout << "N2_window = "<< N2_window << endl;
-  cout << "N1_window = "<< N1_window << " +- " << N1_window_err << endl;
-  cout << "s_window/sqrt(b_window) = " << N2_window / sqrt(N1_window) << endl;
-  ///////////////////////////////////////////////////////////////
-  
-  double m1 = N1/time;
-  double m1prime = m1/(1+m2*tau*(solplus-1));
-  double m2prime = solplus*m2/(1+m2*tau*(solplus-1));
-  double N1prime = m1prime * time;
-  double N2prime = m2prime * time;
-  cout << "N1prime = " << N1prime << endl;
-  cout << "N2prime = " << N2prime << endl;
-  double N1prime_err = N1_original_err * N1prime / N1_original;
-  
-  
-  double N1primeWindow = N1prime*int_lyso_window;
-  double N2primeWindow = N2prime*int_sig_window;
-  double N1primeErrorWindow = N1prime_err * int_lyso_window;
-  cout << "N1prime in window = " << N1primeWindow << " +- " << N1primeErrorWindow << endl;
-  cout << "N2prime in window = " << N2primeWindow << endl;
-  cout << "s_window/sqrt(b_window) = "<< N2primeWindow/sqrt(N1primeWindow) << endl;
-
-  // OTH stuff
-//   
-//   TH1F* hLYSO_gen = (TH1F*) m_LYSO.m_dh->createHistogram("E");
-//   hLYSO_gen->Sumw2();
-//   
-//   //hLYSO_gen->Scale(lyso_yield->getVal()/hLYSO_gen->Integral());
-//   hLYSO_gen->Scale(N1prime/hLYSO_gen->Integral());
-//   
-//   cout << "ERROR=" << hLYSO_gen->GetEntries() << "  " << hLYSO_gen->Integral() << "  " << hLYSO_gen->GetBinContent(hLYSO_gen->GetXaxis()->FindBin(400)) << " " << 
-// hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
-//   
-//   //RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, sig_yield->getVal(), ExpectedData());
-//   RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, N2prime, ExpectedData());
-//   
-//   TH1F* hSig_gen = (TH1F*) dhSig_gen->createHistogram("E");
-//   cout << "hSig_gen: " << hSig_gen->Integral() << endl;
-//     
-//   TH1F* hLYSO_gen_range = MakeHistoInRange(hLYSO_gen, signalWindow_min, signalWindow_max, true);
-//   TH1F* hSig_gen_range = MakeHistoInRange(hSig_gen, signalWindow_min, signalWindow_max, true);
-//   TCanvas* c2 = new TCanvas("c2","c2",1200,400);
-//   c2->Divide(3,1);
-//   c2->cd(1);
-//   hLYSO_gen->Draw("e");
-//   hLYSO_gen_range->Draw("histsame");
-//   hLYSO_gen_range->Draw("same");
-//   c2->cd(2);
-//   hSig_gen->Draw("e");
-//   hSig_gen_range->Draw("histsame");
-//   hSig_gen_range->Draw("same");
-//   c2->cd(3);
-//   TH1F* hData_gen_range = (TH1F*) hLYSO_gen_range->Clone("hData_gen_range");
-//   hData_gen_range->Add(hSig_gen_range);
-//   hData_gen_range->GetYaxis()->SetRangeUser(0, hData_gen_range->GetMaximum()*1.3);
-//   hData_gen_range->Draw("e");
-//   hLYSO_gen_range->Draw("same");
-//   hSig_gen_range->Draw("same");
-  
-//   TFile* f = new TFile("OTHinput/histos.root", "recreate");
-//   hLYSO_gen_range->Write();
-//   hSig_gen_range->Write();
-//   hData_gen_range->Write();
-//   f->Write();
-//   f->Close();
+  m_Nlyso = m_NlysoOrig;
+  m_NlysoErr = m_NlysoErrOrig;
+  m_Nsig = m_NsigOrig;
+  m_time = m_timeOrig;
+  m_activity = m_activityOrig;
 }
-*/
 
 void SetGraphStyle(TGraph* g, int markerStyle, int markerSize, int color) {
 	g->SetMarkerStyle(markerStyle);
@@ -421,15 +332,20 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   Model* model = new Model(E, dataLYSO, sig_gaussian);
   Result* res = model->Fit(data);
   res->Print();
-  double zAnal = res->CalcZanal();
-  res->WriteOTHFile("OTHinput/inputYield.dat");
-  double zOTH = res->CalcZoth("OTHinput/inputYield.dat");
-  cout << "zAnal, zOTH = " << zAnal << " " << zOTH << endl;
   TCanvas* c1 = new TCanvas();
   model->Plot(data, res);
   
-//   model->MakeCalculationsSensitivity();
+  double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
+
+  res->RescaleActivity(alpha);
+  res->ApplyEff(eff_signal, eff_lyso);
   
+  std::pair<double, double> z = res->CalcZ("OTHinput/inputYield.dat");
+  cout << "zAnal, zOTH = " << z.first << " " << z.second << endl;
+  
+  
+  
+  /*
   int Npoints = 5;
   TGraph* gZanalVsTime = new TGraph(Npoints);
   SetGraphStyle(gZanalVsTime, 8, 2, kBlack);
@@ -450,7 +366,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
     gZanalVsTime->SetPoint(i, res->m_time*60, zAnal);
     gZothVsTime->SetPoint(i, res->m_time*60, zOTH);
     
-    res->RescaleActivityAndTime(0.5, timeFactor);
+    res->RescaleActivityAndTime(0.8, timeFactor);
     res->Print();
     zAnal = res->CalcZanal();
     res->WriteOTHFile("OTHinput/inputYieldRescaled.dat");
@@ -468,7 +384,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   TCanvas* cMulti = new TCanvas();
   gMulti->Draw("ap");
-  
+  */
   /*
   res->RescaleActivity(0.05);
   
@@ -486,3 +402,49 @@ void FitLYSOPlusSig()
 {
   FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root", false);
 }
+
+
+
+// OTH stuff
+//   
+//   TH1F* hLYSO_gen = (TH1F*) m_LYSO.m_dh->createHistogram("E");
+//   hLYSO_gen->Sumw2();
+//   
+//   //hLYSO_gen->Scale(lyso_yield->getVal()/hLYSO_gen->Integral());
+//   hLYSO_gen->Scale(N1prime/hLYSO_gen->Integral());
+//   
+//   cout << "ERROR=" << hLYSO_gen->GetEntries() << "  " << hLYSO_gen->Integral() << "  " << hLYSO_gen->GetBinContent(hLYSO_gen->GetXaxis()->FindBin(400)) << " " << 
+// hLYSO_gen->GetBinError(hLYSO_gen->GetXaxis()->FindBin(400)) << endl;
+//   
+//   //RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, sig_yield->getVal(), ExpectedData());
+//   RooDataHist* dhSig_gen = sig_gaussian->generateBinned(*E, N2prime, ExpectedData());
+//   
+//   TH1F* hSig_gen = (TH1F*) dhSig_gen->createHistogram("E");
+//   cout << "hSig_gen: " << hSig_gen->Integral() << endl;
+//     
+//   TH1F* hLYSO_gen_range = MakeHistoInRange(hLYSO_gen, signalWindow_min, signalWindow_max, true);
+//   TH1F* hSig_gen_range = MakeHistoInRange(hSig_gen, signalWindow_min, signalWindow_max, true);
+//   TCanvas* c2 = new TCanvas("c2","c2",1200,400);
+//   c2->Divide(3,1);
+//   c2->cd(1);
+//   hLYSO_gen->Draw("e");
+//   hLYSO_gen_range->Draw("histsame");
+//   hLYSO_gen_range->Draw("same");
+//   c2->cd(2);
+//   hSig_gen->Draw("e");
+//   hSig_gen_range->Draw("histsame");
+//   hSig_gen_range->Draw("same");
+//   c2->cd(3);
+//   TH1F* hData_gen_range = (TH1F*) hLYSO_gen_range->Clone("hData_gen_range");
+//   hData_gen_range->Add(hSig_gen_range);
+//   hData_gen_range->GetYaxis()->SetRangeUser(0, hData_gen_range->GetMaximum()*1.3);
+//   hData_gen_range->Draw("e");
+//   hLYSO_gen_range->Draw("same");
+//   hSig_gen_range->Draw("same");
+  
+//   TFile* f = new TFile("OTHinput/histos.root", "recreate");
+//   hLYSO_gen_range->Write();
+//   hSig_gen_range->Write();
+//   hData_gen_range->Write();
+//   f->Write();
+//   f->Close();
