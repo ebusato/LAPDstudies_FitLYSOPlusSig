@@ -281,19 +281,20 @@ std::pair<TGraph*, TGraph*> Result::MakeGraphAroundAlpha(double alpha)
   TGraph* gOTH = new TGraph(n);
   
   for(int i = 0; i < n; i++) {
+    Restore();
     double alphaprime = 0;
     if(i <= n/2) {
       alphaprime = alpha/(n/2.-i+1);
     } else {
 	alphaprime = (i-n/2.+1)*alpha;    
     }
-    Restore();
     RescaleActivity(alphaprime);
+//     Print();
     ApplyEff(eff_signal, eff_lyso);
     std::pair<double, double> z = CalcZ("OTHinput/inputYield.dat");
     cout << "zAnal, zOTH = " << z.first << " " << z.second << endl;
-    gAnal->SetPoint(i, m_activity, z.first);
-    gOTH->SetPoint(i, m_activity, z.second);
+    gAnal->SetPoint(i, alphaprime, z.first);
+    gOTH->SetPoint(i, alphaprime, z.second);
   
   }
 
@@ -301,6 +302,13 @@ std::pair<TGraph*, TGraph*> Result::MakeGraphAroundAlpha(double alpha)
   SetGraphStyle(gOTH, 4, 1, kRed);
 return std::make_pair(gAnal, gOTH);
   
+}
+
+TF1* Result::MakeFuncZvsAlpha()
+{
+  TF1* f = new TF1("f", "x*[0]/sqrt([1])*1/sqrt(1+[2]*[3]*(x-1))", 0, 250);
+  f->SetParameters(m_Nsig*eff_signal, m_Nlyso*eff_lyso, SigRate(), m_deadTime);
+  return f;
 }
 
 void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
@@ -366,13 +374,14 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
 
+  TF1* f = res->MakeFuncZvsAlpha();
   
   std::pair<TGraph*, TGraph*> graphs = res->MakeGraphAroundAlpha(alpha);
   TMultiGraph* multi = new TMultiGraph();
   multi->Add(graphs.first);
   multi->Add(graphs.second);
   multi->Draw("ap");
-  
+  f->Draw("same");
   /*
   int Npoints = 5;
   TGraph* gZanalVsTime = new TGraph(Npoints);
