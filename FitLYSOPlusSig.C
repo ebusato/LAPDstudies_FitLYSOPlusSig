@@ -41,7 +41,7 @@ double Data::RunDuration()
   double timeEnd = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
   m_tree->GetEntry(0);
   double timeBeg = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
-  return (timeEnd - timeBeg)/60;
+  return (timeEnd - timeBeg)/60.;
 }
 
 
@@ -81,24 +81,21 @@ Result* Model::Fit(Data* data)
  return res;
 }
 
-void Model::Plot(Data* data, Result* res = 0)
+void Model::Plot(Data* data, Result* res, bool plotData)
 {
   double peakEff = 0.9;
-	
-  m_sig_yield->setVal(peakEff*GetSigYield(data));
-  if(res != 0) {
-	m_sig_yield->setVal(peakEff*res->m_Nsig);
-	m_lyso_yield->setVal(res->m_Nlyso);
-  }
+
+  m_sig_yield->setVal(peakEff*res->m_Nsig);
+  m_lyso_yield->setVal(res->m_Nlyso);
   
   RooPlot* frame = m_E->frame(Bins(100));
-  if(res == 0) {
+  if(plotData) {
     data->m_dh->plotOn(frame); //, DrawOption("PX"));
   }
   m_model->plotOn(frame, Range("range_250_Max"));
   m_model->plotOn(frame, Range("range_250_Max"), Components("sig_gaussian"),LineColor(kRed));
   m_model->plotOn(frame, Range("range_200_Max"), Components("histpdf_LYSO"),LineColor(kGreen+2));
-  if(res == 0) {
+  if(plotData) {
     data->m_dh->plotOn(frame); //, DrawOption("PX"));
   }
   frame->Draw();
@@ -110,7 +107,7 @@ void Model::Plot(Data* data, Result* res = 0)
   PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (16 kBq)");
   stringstream ss;
   ss.precision(3);
-  ss << "Run duration: " << data->RunDuration() << " min";
+  ss << "Run duration: " << res->m_time << " min";
   PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
 }
 
@@ -141,21 +138,26 @@ void Model::Plot(Data* data, Result* res = 0)
 //   return hNew;
 // }
 
-Result::Result(double time, double activity, double Nsig, double Nlyso, double NlysoOrig): m_time(time),
+Result::Result(double time, double activity, double Nsig, double Nlyso, double NlysoOrigSample): m_time(time),
 									   m_activity(activity),
 									   m_Nsig(Nsig),
 									   m_Nlyso(Nlyso),
-									   m_NlysoOrig(NlysoOrig)
+									   m_NlysoOrigSample(NlysoOrigSample),
+									   m_timeOrig(time),
+									   m_activityOrig(activity),
+									   m_NsigOrig(Nsig),
+									   m_NlysoOrig(Nlyso)
 {
   m_deadTime = 41.15e-3;
   m_NlysoErr = 0;
+  m_NlysoErrOrig = 0;
 }
 
 void Result::Print() 
 {
 	cout << "Printing result: "<< endl;
 	cout << "  -> Activity = " << m_activity << endl;
-	cout << "  -> Time = " << m_time << endl;
+	cout << "  -> Time = " << m_time*60 << " sec" << endl;
 	cout << "  -> Nsig = " << m_Nsig << endl;
 	cout << "  -> Nlyso = " << m_Nlyso << " +- " << m_NlysoErr << endl;
 	cout << "  -> NlysoOrig = " << m_NlysoOrig << endl;
@@ -169,7 +171,8 @@ void Result::Print()
 void Result::WriteOTHFile(TString fileName) 
 {
   ofstream of(fileName.Data());
-  of << "+bg LYSO " << m_Nlyso << " " << m_NlysoErr << endl << endl;
+//   of << "+bg LYSO " << m_Nlyso << " " << m_NlysoErr << endl << endl;
+  of << "+bg LYSO " << m_Nlyso << endl << endl;
   of << "+sig Sig " << m_Nsig << endl << endl;
   of << "+data " << m_Nsig + m_Nlyso << endl;
 }
@@ -186,7 +189,7 @@ double Result::CalcZoth(TString fileName)
 	
   OpTHyLiC oth(OTH::SystPolyexpo,OTH::StatLogN);
   oth.addChannel("ch1",fileName.Data());
-  const int Nexp=5e5;
+  const int Nexp=5e6;
   std::pair<double, double> s = oth.significance(OTH::SignifExpectedMed,Nexp);
   const double p=s.first;
   const double z=s.second;
@@ -203,16 +206,23 @@ double Result::CalcZanal()
 
 void Result::RescaleActivity(double factor) {
   // compute rates in sec-1
-  double mLYSO = m_Nlyso / m_time / 60.;
-  double mSig = m_Nsig / m_time / 60.;
+  double mLYSO = m_NlysoOrig / m_timeOrig / 60.;
+  double mSig = m_NsigOrig / m_timeOrig / 60.;
   
   // compute rescaled quantities
   double mLYSOprime = mLYSO / (1+mSig*m_deadTime*(factor-1));
   double mSigprime = factor*mSig / (1+mSig*m_deadTime*(factor-1));
   
-  m_activity *= factor;
+  m_activity = m_activityOrig * factor;
   m_Nlyso = mLYSOprime*m_time*60;
   m_Nsig = mSigprime*m_time*60;
+}
+
+
+void Result::RescaleTime(double factor) {
+  m_Nlyso = m_NlysoOrig * factor;
+  m_Nsig = m_NsigOrig * factor;
+  m_time = m_timeOrig * factor;
 }
 
 /*
@@ -340,6 +350,12 @@ void Result::MakeCalculationsSensitivity(Data* data)
 }
 */
 
+void SetGraphStyle(TGraph* g, int markerStyle, int markerSize, int color) {
+	g->SetMarkerStyle(markerStyle);
+	g->SetMarkerSize(markerSize);
+	g->SetMarkerColor(color);
+}
+
 void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
 {
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
@@ -397,17 +413,41 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   Model* model = new Model(E, dataLYSO, sig_gaussian);
   Result* res = model->Fit(data);
-  
-//   model->MakeCalculationsSensitivity();
-
   res->Print();
   double zAnal = res->CalcZanal();
   res->WriteOTHFile("OTHinput/inputYield.dat");
   double zOTH = res->CalcZoth("OTHinput/inputYield.dat");
   cout << "zAnal, zOTH = " << zAnal << " " << zOTH << endl;
   TCanvas* c1 = new TCanvas();
-  model->Plot(data);
+  model->Plot(data, res);
   
+//   model->MakeCalculationsSensitivity();
+  
+  int Npoints = 5;
+  TGraph* gZanalVsTime = new TGraph(Npoints);
+  SetGraphStyle(gZanalVsTime, 8, 2, kBlack);
+  TGraph* gZothVsTime = new TGraph(Npoints);
+  SetGraphStyle(gZothVsTime, 21, 2, kRed);
+  for(int i = 0; i < Npoints; i++) {
+    double timeFactor = (i+1)/1000.; 
+    res->RescaleTime(timeFactor);
+    res->Print();
+    zAnal = res->CalcZanal();
+    res->WriteOTHFile("OTHinput/inputYieldRescaled.dat");
+    zOTH = res->CalcZoth("OTHinput/inputYieldRescaled.dat");
+    cout << "i, Zanal, Zoth = " << i << " " << zAnal << " " << zOTH << endl;
+    gZanalVsTime->SetPoint(i, res->m_time*60, zAnal);
+    gZothVsTime->SetPoint(i, res->m_time*60, zOTH);
+  }
+  
+  TMultiGraph* gMulti = new TMultiGraph();
+  gMulti->Add(gZanalVsTime);
+  gMulti->Add(gZothVsTime);
+  
+  TCanvas* cMulti = new TCanvas();
+  gMulti->Draw("ap");
+  
+  /*
   res->RescaleActivity(0.05);
   
   res->Print();
@@ -416,7 +456,8 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   zOTH = res->CalcZoth("OTHinput/inputYieldRescaled.dat");
   cout << "zAnal, zOTH = " << zAnal << " " << zOTH << endl;
   TCanvas* c2 = new TCanvas();
-  model->Plot(data, res);
+  model->Plot(data, res, false);
+  */
 }
 
 void FitLYSOPlusSig()

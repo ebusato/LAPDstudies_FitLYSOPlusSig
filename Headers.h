@@ -22,6 +22,7 @@ public:
 	double CalcZoth(TString fileName);
 	double CalcZanal();
 	void RescaleActivity(double factor);
+	void RescaleTime(double factor);
 	void MakeCalculationsSensitivity(Data* data);
 	void Print();
 	
@@ -29,8 +30,14 @@ public:
 	double m_activity;
 	double m_Nsig;
 	double m_Nlyso;
-	double m_NlysoOrig;
+	double m_NlysoOrigSample;
 	double m_NlysoErr;
+	
+	double m_timeOrig;
+	double m_activityOrig;
+	double m_NsigOrig;
+	double m_NlysoOrig;
+	double m_NlysoErrOrig;
 	
 	double m_deadTime;
 };
@@ -40,7 +47,7 @@ public:
   Model(RooRealVar* E, Data* lyso, RooAbsPdf* sig_gaussian);
   void MakeCalculationsSensitivity(Data* data);
   Result* Fit(Data* data);
-  void Plot(Data* data, Result* res = 0);
+  void Plot(Data* data, Result* res, bool plotData = true);
   double GetSigYield(Data* data);
   
   RooRealVar* m_lyso_yield;
