@@ -23,6 +23,7 @@ public:
 	double CalcZanal();
 	void RescaleActivity(double factor);
 	void RescaleTime(double factor);
+	void RescaleActivityAndTime(double factorAct, double factorTime);
 	void MakeCalculationsSensitivity(Data* data);
 	void Print();
 	

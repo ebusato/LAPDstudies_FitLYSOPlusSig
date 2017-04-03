@@ -189,8 +189,9 @@ double Result::CalcZoth(TString fileName)
 	
   OpTHyLiC oth(OTH::SystPolyexpo,OTH::StatLogN);
   oth.addChannel("ch1",fileName.Data());
-  const int Nexp=5e6;
+  const int Nexp=5e5;
   std::pair<double, double> s = oth.significance(OTH::SignifExpectedMed,Nexp);
+//    std::pair<double, double> s = oth.significance(OTH::SignifObserved,Nexp);
   const double p=s.first;
   const double z=s.second;
 
@@ -214,15 +215,21 @@ void Result::RescaleActivity(double factor) {
   double mSigprime = factor*mSig / (1+mSig*m_deadTime*(factor-1));
   
   m_activity = m_activityOrig * factor;
-  m_Nlyso = mLYSOprime*m_time*60;
-  m_Nsig = mSigprime*m_time*60;
+  m_Nlyso = mLYSOprime*m_timeOrig*60;
+  m_Nsig = mSigprime*m_timeOrig*60;
 }
-
 
 void Result::RescaleTime(double factor) {
   m_Nlyso = m_NlysoOrig * factor;
   m_Nsig = m_NsigOrig * factor;
   m_time = m_timeOrig * factor;
+}
+
+void Result::RescaleActivityAndTime(double factorAct, double factorTime) {
+  RescaleActivity(factorAct);
+  m_Nlyso = m_Nlyso*factorTime;
+  m_Nsig = m_Nsig*factorTime;
+  m_time = m_timeOrig*factorTime;
 }
 
 /*
@@ -305,7 +312,7 @@ void Result::MakeCalculationsSensitivity(Data* data)
   cout << "s_window/sqrt(b_window) = "<< N2primeWindow/sqrt(N1primeWindow) << endl;
 
   // OTH stuff
-  
+//   
 //   TH1F* hLYSO_gen = (TH1F*) m_LYSO.m_dh->createHistogram("E");
 //   hLYSO_gen->Sumw2();
 //   
@@ -428,6 +435,10 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   SetGraphStyle(gZanalVsTime, 8, 2, kBlack);
   TGraph* gZothVsTime = new TGraph(Npoints);
   SetGraphStyle(gZothVsTime, 21, 2, kRed);
+  TGraph* gZanalVsTime_act1 = new TGraph(Npoints);
+  SetGraphStyle(gZanalVsTime_act1, 8, 1, kGreen+2);
+  TGraph* gZothVsTime_act1 = new TGraph(Npoints);
+  SetGraphStyle(gZothVsTime_act1, 21, 1, kMagenta);
   for(int i = 0; i < Npoints; i++) {
     double timeFactor = (i+1)/1000.; 
     res->RescaleTime(timeFactor);
@@ -438,11 +449,22 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
     cout << "i, Zanal, Zoth = " << i << " " << zAnal << " " << zOTH << endl;
     gZanalVsTime->SetPoint(i, res->m_time*60, zAnal);
     gZothVsTime->SetPoint(i, res->m_time*60, zOTH);
+    
+    res->RescaleActivityAndTime(0.5, timeFactor);
+    res->Print();
+    zAnal = res->CalcZanal();
+    res->WriteOTHFile("OTHinput/inputYieldRescaled.dat");
+    zOTH = res->CalcZoth("OTHinput/inputYieldRescaled.dat");
+    cout << "i, Zanal, Zoth = " << i << " " << zAnal << " " << zOTH << endl;
+    gZanalVsTime_act1->SetPoint(i, res->m_time*60, zAnal);
+    gZothVsTime_act1->SetPoint(i, res->m_time*60, zOTH);
   }
   
   TMultiGraph* gMulti = new TMultiGraph();
   gMulti->Add(gZanalVsTime);
   gMulti->Add(gZothVsTime);
+  gMulti->Add(gZanalVsTime_act1);
+  gMulti->Add(gZothVsTime_act1);
   
   TCanvas* cMulti = new TCanvas();
   gMulti->Draw("ap");
