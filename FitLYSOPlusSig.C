@@ -23,9 +23,11 @@ using namespace RooFit ;
 // We assume that this cut selects 50% of the signal (rough estimation, this needs to be estimated on simulation)
 // On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 0.0033... (without this cut we have 800000 events in E[0]>>h histogram,
 // and with the cut we have 2666 events)
-// Try to improve by also cutting on CTR
-double eff_signal = 0.5;
+double eff_signal = 0.85;
 double eff_lyso = 0.0034;
+
+// double eff_signal = 1;
+// double eff_lyso = 1;
 
 double peakEff = 0.9;
   
@@ -93,16 +95,20 @@ Result* Model::Fit(Data* data)
     data->GetDataHistFromTH1("hE_data", "dhE_data");
   }
   
-  m_sig_yield->setConstant();
 //   RooMsgService::instance().setSilentMode(true);
+
+
+  m_sig_yield->setConstant();
  m_model->fitTo(*(data->m_dh), Extended(),Range("range_650_Max"), PrintEvalErrors(-1));
- 
+
+//  m_model->fitTo(*(data->m_dh), Extended(),Range("range_700_Max"), PrintEvalErrors(-1));
+
  Result* res = new Result(data->RunDuration(), data->m_activity, GetSigYield(data), m_lyso_yield->getVal(), m_LYSO->m_dh->sum(kFALSE));
  return res;
 }
 
 void Model::Plot(Data* data, Result* res, bool plotData)
-{
+{m_sig_yield->setConstant(0);
   m_sig_yield->setVal(peakEff*res->m_Nsig);
   m_lyso_yield->setVal(res->m_Nlyso);
   
@@ -227,7 +233,7 @@ std::pair<double, double> Result::CalcZ(TString fileName)
   system(cmd.Data());
   */
   
-  WriteOTHFile("OTHinput/inputYield.dat");
+  WriteOTHFile(fileName.Data());
   OpTHyLiC oth(OTH::SystPolyexpo,OTH::StatLogN);
   oth.addChannel("ch1",fileName.Data());
   const int Nexp=5e5;
@@ -236,7 +242,38 @@ std::pair<double, double> Result::CalcZ(TString fileName)
   const double p=s.first;
   const double z=s.second;
   
-  return std::make_pair(m_Nsig/sqrt(m_Nlyso), z);
+  /*
+  TH1F* hLLRb=(TH1F*)oth.getHistoLLRb();
+  hLLRb->GetXaxis()->SetTitleSize(0.05);
+  hLLRb->GetXaxis()->SetTitleOffset(0.88);
+  hLLRb->GetXaxis()->SetTitle("q_{ #mu}");
+  hLLRb->GetYaxis()->SetTitle("");
+  hLLRb->SetLineColor(kRed);
+  TH1F* hLLRsb=(TH1F*)oth.getHistoLLRsb();
+	 hLLRsb->SetLineColor(kBlue);
+	 hLLRb->SetLineWidth(4);
+  
+  TCanvas *c1 = new TCanvas();
+//   c1->SetLogy();
+  hLLRb->Draw();
+  hLLRsb->Draw("same");*/
+  
+  /*
+  double qmuobs=oth.computeLLRdata();
+  TArrow* arr = new TArrow(qmuobs,hLLRb->GetMaximum()/5.,qmuobs,0,0.02,"|>");
+  arr->SetLineWidth(3);
+  arr->SetLineColor(kRed);
+  arr->SetFillColor(kRed);
+  arr->Draw();
+  TLatex latex1;
+  latex1.SetTextSize(0.05);
+  latex1.SetTextColor(kRed);
+  latex1.DrawLatex(qmuobs,hLLRb->GetMaximum()/2.,"q_{ #mu}^{obs}");
+  */
+  
+//   return std::make_pair(m_Nsig/sqrt(m_Nlyso), z);
+  double zCowan = sqrt(2*((m_Nsig+m_Nlyso)*TMath::Log(1+m_Nsig/m_Nlyso) - m_Nsig));
+  return std::make_pair(zCowan, z);
 }
 
 void Result::RescaleActivity(double factor) {
@@ -254,9 +291,9 @@ void Result::RescaleActivity(double factor) {
 }
 
 void Result::RescaleTime(double factor) {
-  m_Nlyso *= factor;
-  m_Nsig *= factor;
-  m_time *= factor;
+  m_Nlyso = m_Nlyso * factor;
+  m_Nsig = m_Nsig * factor;
+  m_time = m_time * factor;
 }
 
 void Result::Restore()
@@ -274,41 +311,121 @@ void SetGraphStyle(TGraph* g, int markerStyle, int markerSize, int color) {
 	g->SetMarkerColor(color);
 }
 
-std::pair<TGraph*, TGraph*> Result::MakeGraphAroundAlpha(double alpha) 
+TF1* Result::MakeFuncZvsActivity(int color, int style)
 {
-  int n = 7;
-  TGraph* gAnal = new TGraph(n);
-  TGraph* gOTH = new TGraph(n);
-  
-  for(int i = 0; i < n; i++) {
-    Restore();
-    double alphaprime = 0;
-    if(i <= n/2) {
-      alphaprime = alpha/(n/2.-i+1);
-    } else {
-	alphaprime = (i-n/2.+1)*alpha;    
-    }
-    RescaleActivity(alphaprime);
-//     Print();
-    ApplyEff(eff_signal, eff_lyso);
-    std::pair<double, double> z = CalcZ("OTHinput/inputYield.dat");
-    cout << "zAnal, zOTH = " << z.first << " " << z.second << endl;
-    gAnal->SetPoint(i, alphaprime, z.first);
-    gOTH->SetPoint(i, alphaprime, z.second);
-  
-  }
-
-  SetGraphStyle(gAnal, 8, 2, kBlack);
-  SetGraphStyle(gOTH, 4, 1, kRed);
-return std::make_pair(gAnal, gOTH);
-  
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Old stuff, could eventually be removed
+  // [0]: sig yield
+  // [1]: lyso yield
+  // [2]: sig rate
+  // [3]: dead time
+  // [4]: activity ref
+//   TF1* f = new TF1("f", "x/[4]*[0]/sqrt([1])*1/sqrt(1+[2]*[3]*(x/[4]-1))", 0, 1000);
+//   f->SetParameters(m_Nsig*eff_signal, m_Nlyso*eff_lyso, SigRate(), m_deadTime, m_activity);
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+	
+  // [0]: sig rate
+  // [1]: lyso rate
+  // [2]: dead time
+  // [3]: activity ref
+  // [4]: time
+  // [5]: eff signal
+  // [6]: eff background
+//   TF1* f = new TF1("f", "x/[3]*[0]*1/sqrt([1]*(1+[0]*[2]*(x/[3]-1))) * sqrt([4]) * [5]/sqrt([6])", 0, 1000);
+  // Cowan's formula
+  TF1* f = new TF1("f", "sqrt(2*([4]/(1+[0]*[2]*(x/[3]-1))*([1]*[6] + x/[3]*[0]*[5])*TMath::Log(1+([5]*x/[3]*[0])/([6]*[1])) - [5]*x/[3]*[0]*[4]/(1+[0]*[2]*(x/[3]-1))))", 0, 2000);
+  f->SetParameters(SigRate(), LysoRate(), m_deadTime, m_activity, m_time*60., eff_signal, eff_lyso);
+  f->SetLineColor(color);
+  f->SetLineStyle(style);
+  f->SetNpx(1e4);
+  return f;
 }
 
-TF1* Result::MakeFuncZvsAlpha()
+TGraph* GetOTHTGraphAroundAlpha(Result* res, double alpha, int color, Model* model, Data* data, bool removeFirstPoint = false)
+{ 
+
+  TGraph* g = new TGraph(4);
+  for(int i=0; i < 4; i++) {
+   Result* resClone = res->Clone();
+   double factor;
+   if(i==0) factor = 1/2.;
+   else if(i==1) factor = 1/1.5;
+   else if(i==2) factor = 1/1.1;
+   else if(i==3) factor = 1.4;
+   else if(i==4) factor = 1.4;
+   resClone->RescaleActivity(alpha*factor);
+   
+   TCanvas* cc = new TCanvas();
+  model->Plot(data, resClone);
+   resClone->ApplyEff(eff_signal, eff_lyso);
+   std::pair<double, double> zs = resClone->CalcZ("OTHinput/inputYield.dat");
+   resClone->Print();
+   cout << "z(anal) = " << zs.first << " ; z(oth) = " << zs.second << endl;
+   g->SetPoint(i, res->m_activity*alpha*factor, zs.second);
+  
+  }
+  if(removeFirstPoint) g->RemovePoint(0);
+  g->SetMarkerColor(color);
+  g->SetLineColor(color);
+  return g;
+}
+
+void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
 {
-  TF1* f = new TF1("f", "x*[0]/sqrt([1])*1/sqrt(1+[2]*[3]*(x-1))", 0, 250);
-  f->SetParameters(m_Nsig*eff_signal, m_Nlyso*eff_lyso, SigRate(), m_deadTime);
-  return f;
+  gPad->SetGridx(1);
+  gPad->SetGridy(1);
+  
+  // raw
+  TF1* f1 = res->MakeFuncZvsActivity(kBlack, 9);
+  f1->GetYaxis()->SetRangeUser(0, 5);
+  
+  
+  TGraph* g1 = GetOTHTGraphAroundAlpha(res, 35/14400., kBlack, model, data);
+  
+  // rescale
+  res->RescaleTime(1/3.); res->Print();
+  TF1* f2 = res->MakeFuncZvsActivity(kRed, 7);
+  
+   TGraph* g2 = GetOTHTGraphAroundAlpha(res, 67/14400., kRed, model, data);
+  
+  // rescale
+  res->RescaleTime(1/3.); res->Print();
+  TF1* f3 = res->MakeFuncZvsActivity(kGreen+2, 2);
+  
+   TGraph* g3 = GetOTHTGraphAroundAlpha(res, 130/14400., kGreen+2, model, data);
+  
+  // rescale
+  res->RescaleTime(1/3.); res->Print();
+  TF1* f4 = res->MakeFuncZvsActivity(kBlue, 10);
+  
+   TGraph* g4 = GetOTHTGraphAroundAlpha(res, 260/14400., kBlue, model, data);
+ 
+    // rescale
+  res->RescaleTime(1/2.); res->Print();
+  TF1* f5 = res->MakeFuncZvsActivity(kOrange, 10);
+  
+   TGraph* g5 = GetOTHTGraphAroundAlpha(res, 400/14400., kOrange, model, data, true);
+ 
+   
+  TMultiGraph* g = new TMultiGraph();
+  g->Add(g1);
+  g->Add(g2);
+  g->Add(g3);
+  g->Add(g4);
+  g->Add(g5);
+  g->Draw("apl");
+ 
+//   f1->Draw("same");
+//   f2->Draw("same");
+//   f3->Draw("same");
+//   f4->Draw("same");
+//   f5->Draw("same");
+  
+  
+  // draw 3 sigma line
+  TLine* line3sigmas = new TLine(0, 3, 1000, 3);
+  line3sigmas->SetLineWidth(3);
+  line3sigmas->Draw("same");
 }
 
 void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
@@ -321,6 +438,8 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   E->setRange("range_400_Max", 400, E->getMax());
   E->setRange("range_450_Max", 450, E->getMax());
   E->setRange("range_650_Max", 650, E->getMax());
+  E->setRange("range_700_Max", 700, E->getMax());
+  E->setRange("range_750_Max", 750, E->getMax());
   E->setRange("range_650_900", 650, 900);
   double signalWindow_min = 450;
   double signalWindow_max = 570;
@@ -369,75 +488,22 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   Model* model = new Model(E, dataLYSO, sig_gaussian);
   Result* res = model->Fit(data);
   res->Print();
-  TCanvas* c1 = new TCanvas();
+  TCanvas* c1 = new TCanvas("c1", "c1");
   model->Plot(data, res);
+ 
   
-  double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
-
-  TF1* f = res->MakeFuncZvsAlpha();
+//   double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
   
-  std::pair<TGraph*, TGraph*> graphs = res->MakeGraphAroundAlpha(alpha);
-  TMultiGraph* multi = new TMultiGraph();
-  multi->Add(graphs.first);
-  multi->Add(graphs.second);
-  multi->Draw("ap");
-  f->Draw("same");
-  /*
-  int Npoints = 5;
-  TGraph* gZanalVsTime = new TGraph(Npoints);
-  SetGraphStyle(gZanalVsTime, 8, 2, kBlack);
-  TGraph* gZothVsTime = new TGraph(Npoints);
-  SetGraphStyle(gZothVsTime, 21, 2, kRed);
-  TGraph* gZanalVsTime_act1 = new TGraph(Npoints);
-  SetGraphStyle(gZanalVsTime_act1, 8, 1, kGreen+2);
-  TGraph* gZothVsTime_act1 = new TGraph(Npoints);
-  SetGraphStyle(gZothVsTime_act1, 21, 1, kMagenta);
-  for(int i = 0; i < Npoints; i++) {
-    double timeFactor = (i+1)/1000.; 
-    res->RescaleTime(timeFactor);
-    res->Print();
-    zAnal = res->CalcZanal();
-    res->WriteOTHFile("OTHinput/inputYieldRescaled.dat");
-    zOTH = res->CalcZoth("OTHinput/inputYieldRescaled.dat");
-    cout << "i, Zanal, Zoth = " << i << " " << zAnal << " " << zOTH << endl;
-    gZanalVsTime->SetPoint(i, res->m_time*60, zAnal);
-    gZothVsTime->SetPoint(i, res->m_time*60, zOTH);
-    
-    res->RescaleActivityAndTime(0.8, timeFactor);
-    res->Print();
-    zAnal = res->CalcZanal();
-    res->WriteOTHFile("OTHinput/inputYieldRescaled.dat");
-    zOTH = res->CalcZoth("OTHinput/inputYieldRescaled.dat");
-    cout << "i, Zanal, Zoth = " << i << " " << zAnal << " " << zOTH << endl;
-    gZanalVsTime_act1->SetPoint(i, res->m_time*60, zAnal);
-    gZothVsTime_act1->SetPoint(i, res->m_time*60, zOTH);
-  }
+  TCanvas* c2 = new TCanvas("c2", "c2");
+  MakeZVsAlphaPlot(res, model, data);
   
-  TMultiGraph* gMulti = new TMultiGraph();
-  gMulti->Add(gZanalVsTime);
-  gMulti->Add(gZothVsTime);
-  gMulti->Add(gZanalVsTime_act1);
-  gMulti->Add(gZothVsTime_act1);
-  
-  TCanvas* cMulti = new TCanvas();
-  gMulti->Draw("ap");
-  */
-  /*
-  res->RescaleActivity(0.05);
-  
-  res->Print();
-  zAnal = res->CalcZanal();
-  res->WriteOTHFile("OTHinput/inputYieldRescaled.dat");
-  zOTH = res->CalcZoth("OTHinput/inputYieldRescaled.dat");
-  cout << "zAnal, zOTH = " << zAnal << " " << zOTH << endl;
-  TCanvas* c2 = new TCanvas();
-  model->Plot(data, res, false);
-  */
 }
 
 void FitLYSOPlusSig()
 {
-  FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root", false);
+//   FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root", false);
+FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "analysis_v2.18-calibC1/run78.root", false);
+// 	FitLYSOPlusSig("analysis_v2.18-calibC1/run34.root", "analysis_v2.18-calibC1/run78.root", false);
 }
 
 

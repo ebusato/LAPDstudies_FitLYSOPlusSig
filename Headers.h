@@ -26,11 +26,13 @@ public:
 	void RescaleTime(double factor);
 	void Restore();
 	std::pair<TGraph*, TGraph*> MakeGraphAroundAlpha(double alpha);
-	TF1* MakeFuncZvsAlpha();
+	TF1* MakeFuncZvsActivity(int color, int style);
 	void Print();
 	
 	double SigRate() {return m_Nsig/m_time/60.;}
 	double LysoRate() {return m_Nlyso/m_time/60.;}
+	
+	Result* Clone();
 	
 	double m_time;
 	double m_activity;
@@ -47,6 +49,11 @@ public:
 	
 	double m_deadTime;
 };
+
+Result* Result::Clone()
+{
+	return new Result(m_time, m_activity, m_Nsig, m_Nlyso, m_NlysoOrigSample);
+}
 
 class Model {
 public:
