@@ -112,27 +112,50 @@ void Model::Plot(Data* data, Result* res, bool plotData)
   m_sig_yield->setVal(peakEff*res->m_Nsig);
   m_lyso_yield->setVal(res->m_Nlyso);
   
-  RooPlot* frame = m_E->frame(Bins(100));
+  TGraph* data_graph, *sig_graph, *lyso_graph;
+  
+  RooPlot* frame = m_E->frame(Bins(100), Range("range_200_1000"));
+  frame->GetYaxis()->SetTitle("Events");
+  frame->GetXaxis()->SetTitle("E [keV]");
   if(plotData) {
     data->m_dh->plotOn(frame); //, DrawOption("PX"));
+    data_graph = (TGraph*)frame->getObject( frame->numItems() - 1  );
   }
+  
   m_model->plotOn(frame, Range("range_250_Max"));
   m_model->plotOn(frame, Range("range_250_Max"), Components("sig_gaussian"),LineColor(kRed));
+  sig_graph = (TGraph*)frame->getObject( frame->numItems() - 1  );
   m_model->plotOn(frame, Range("range_200_Max"), Components("histpdf_LYSO"),LineColor(kGreen+2));
+  lyso_graph = (TGraph*)frame->getObject( frame->numItems() - 1  );
   if(plotData) {
     data->m_dh->plotOn(frame); //, DrawOption("PX"));
   }
   frame->Draw();
- 
+  	frame->GetXaxis()->SetTitleSize(0.05);
+	frame->GetYaxis()->SetTitleSize(0.05);
+	frame->GetXaxis()->SetTitleOffset(1.25);
+	frame->GetYaxis()->SetTitleOffset(1.2);
+	frame->GetXaxis()->SetLabelSize(0.05);
+	frame->GetYaxis()->SetLabelSize(0.05);
   double xText = 0.55;
   double yShift = 0.07;
   PutText(xText, 0.81, kBlack, "LAPD");
  // PutText(xText, 0.85-yShift, kBlack, "LPC");
-  PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (16 kBq)");
+  PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (14.4 kBq)");
   stringstream ss;
   ss.precision(3);
   ss << "Run duration: " << res->m_time << " min";
   PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
+  
+  TLegend* leg = new TLegend(0.6,0.42,0.75,0.62);
+	leg->SetBorderSize(0);
+	leg->SetTextSize(0.04);
+	if(data_graph) leg->AddEntry(data_graph, "Data", "lp");
+	if(sig_graph) leg->AddEntry(sig_graph, "Signal photopeak", "l");
+	if(lyso_graph) leg->AddEntry(lyso_graph, "LYSO background", "l");
+// 	leg->AddEntry(h2.first, "z = 13.5 cm", "l");
+// 	leg->AddEntry(h3.first, "z = 14 cm", "l");
+	leg->Draw();
 }
 
 
@@ -355,8 +378,9 @@ TGraph* GetOTHTGraphAroundAlpha(Result* res, double alpha, int color, Model* mod
    else if(i==4) factor = 1.4;
    resClone->RescaleActivity(alpha*factor);
    
-   TCanvas* cc = new TCanvas();
-  model->Plot(data, resClone);
+   resClone->Print();
+//    TCanvas* cc = new TCanvas();
+//   model->Plot(data, resClone);
    resClone->ApplyEff(eff_signal, eff_lyso);
    std::pair<double, double> zs = resClone->CalcZ("OTHinput/inputYield.dat");
    resClone->Print();
@@ -376,6 +400,7 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
   gPad->SetGridy(1);
   
   // raw
+  double time1 = res->m_time;
   TF1* f1 = res->MakeFuncZvsActivity(kBlack, 9);
   f1->GetYaxis()->SetRangeUser(0, 5);
   
@@ -384,24 +409,28 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
   
   // rescale
   res->RescaleTime(1/3.); res->Print();
+  double time2 = res->m_time;
   TF1* f2 = res->MakeFuncZvsActivity(kRed, 7);
   
    TGraph* g2 = GetOTHTGraphAroundAlpha(res, 67/14400., kRed, model, data);
   
   // rescale
   res->RescaleTime(1/3.); res->Print();
+  double time3 = res->m_time;
   TF1* f3 = res->MakeFuncZvsActivity(kGreen+2, 2);
   
    TGraph* g3 = GetOTHTGraphAroundAlpha(res, 130/14400., kGreen+2, model, data);
   
   // rescale
   res->RescaleTime(1/3.); res->Print();
+  double time4 = res->m_time;
   TF1* f4 = res->MakeFuncZvsActivity(kBlue, 10);
   
    TGraph* g4 = GetOTHTGraphAroundAlpha(res, 260/14400., kBlue, model, data);
  
     // rescale
   res->RescaleTime(1/2.); res->Print();
+  double time5 = res->m_time;
   TF1* f5 = res->MakeFuncZvsActivity(kOrange, 10);
   
    TGraph* g5 = GetOTHTGraphAroundAlpha(res, 400/14400., kOrange, model, data, true);
@@ -413,8 +442,30 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
   g->Add(g3);
   g->Add(g4);
   g->Add(g5);
+  
   g->Draw("apl");
- 
+ 	g->GetXaxis()->SetTitleSize(0.05);
+	g->GetYaxis()->SetTitleSize(0.05);
+	g->GetXaxis()->SetTitleOffset(1.25);
+	g->GetYaxis()->SetTitleOffset(1.2);
+	g->GetXaxis()->SetLabelSize(0.05);
+	g->GetYaxis()->SetLabelSize(0.05);
+  g->GetXaxis()->SetTitle("activity [Bq]");
+  g->GetYaxis()->SetTitle("significance");
+  g->GetYaxis()->SetRangeUser(0.5,4.2);
+  g->GetXaxis()->SetRangeUser(0.,600);
+  TLatex l;
+  l.SetTextColor(kBlack);
+  l.SetTextSize(0.045);
+    PutText(0.55, 0.31, kBlack, "LAPD");
+  PutText(0.55, 0.31-0.071, kBlack, "^{22}Na source at (0,0,0)");
+  double x, y;
+  g1->GetPoint(0, x, y); l.DrawLatex(x, y-0.3, Form("time = %.1f min", time1));
+  g2->GetPoint(0, x, y); l.SetTextColor(kRed); l.DrawLatex(x+10, y-0.05, Form("time = %.1f min", time2));
+  g3->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+10, y-0.1, Form("time = %.1f min", time3));
+  g4->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+20, y, Form("time = %.1f sec", time4*60));
+  g5->GetPoint(0, x, y); l.SetTextColor(kOrange+1); l.DrawLatex(x+40, y, Form("time = %.1f sec", time5*60));
+  
 //   f1->Draw("same");
 //   f2->Draw("same");
 //   f3->Draw("same");
@@ -423,7 +474,7 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
   
   
   // draw 3 sigma line
-  TLine* line3sigmas = new TLine(0, 3, 1000, 3);
+  TLine* line3sigmas = new TLine(0, 3, 590, 3);
   line3sigmas->SetLineWidth(3);
   line3sigmas->Draw("same");
 }
@@ -433,6 +484,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   RooRealVar* E = new RooRealVar("E", "Energy", 0, 1200, "keV");
   E->setBins(150);
   E->setRange("range_whole", E->getMin(), E->getMax());
+  E->setRange("range_200_1000", 200, 1000);
   E->setRange("range_250_Max", 250, E->getMax());
   E->setRange("range_300_Max", 300, E->getMax());
   E->setRange("range_400_Max", 400, E->getMax());
@@ -490,12 +542,13 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   res->Print();
   TCanvas* c1 = new TCanvas("c1", "c1");
   model->Plot(data, res);
- 
+ c1->SaveAs("FitLYSOPlusSig_c1.png");
   
 //   double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
   
   TCanvas* c2 = new TCanvas("c2", "c2");
   MakeZVsAlphaPlot(res, model, data);
+  c2->SaveAs("FitLYSOPlusSig_c2.png");
   
 }
 
