@@ -431,9 +431,9 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
     // rescale
   res->RescaleTime(1/2.); res->Print();
   double time5 = res->m_time;
-  TF1* f5 = res->MakeFuncZvsActivity(kOrange, 10);
+  TF1* f5 = res->MakeFuncZvsActivity(kMagenta, 10);
   
-   TGraph* g5 = GetOTHTGraphAroundAlpha(res, 400/14400., kOrange, model, data, true);
+   TGraph* g5 = GetOTHTGraphAroundAlpha(res, 400/14400., kMagenta, model, data, true);
  
    
   TMultiGraph* g = new TMultiGraph();
@@ -451,7 +451,7 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
 	g->GetXaxis()->SetLabelSize(0.05);
 	g->GetYaxis()->SetLabelSize(0.05);
   g->GetXaxis()->SetTitle("activity [Bq]");
-  g->GetYaxis()->SetTitle("significance");
+  g->GetYaxis()->SetTitle("significance (expected median)");
   g->GetYaxis()->SetRangeUser(0.5,4.2);
   g->GetXaxis()->SetRangeUser(0.,600);
   TLatex l;
@@ -464,7 +464,7 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
   g2->GetPoint(0, x, y); l.SetTextColor(kRed); l.DrawLatex(x+10, y-0.05, Form("time = %.1f min", time2));
   g3->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+10, y-0.1, Form("time = %.1f min", time3));
   g4->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+20, y, Form("time = %.1f sec", time4*60));
-  g5->GetPoint(0, x, y); l.SetTextColor(kOrange+1); l.DrawLatex(x+40, y, Form("time = %.1f sec", time5*60));
+  g5->GetPoint(0, x, y); l.SetTextColor(kMagenta); l.DrawLatex(x+40, y, Form("time = %.1f sec", time5*60));
   
 //   f1->Draw("same");
 //   f2->Draw("same");
