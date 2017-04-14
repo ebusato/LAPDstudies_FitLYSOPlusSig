@@ -555,7 +555,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
 void FitLYSOPlusSig()
 {
 //   FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "~/godaq_rootfiles/analysis_v2.10.0/run78.root", false);
-FitLYSOPlusSig("~/godaq_rootfiles/analysis_v2.10.0/run67.root", "analysis_v2.18-calibC1/run78.root", false);
+FitLYSOPlusSig("analysis_v2.18-calibC1/run67.root", "analysis_v2.18-calibC1/run78.root", false);
 // 	FitLYSOPlusSig("analysis_v2.18-calibC1/run34.root", "analysis_v2.18-calibC1/run78.root", false);
 }
 
