@@ -23,8 +23,8 @@ using namespace RooFit ;
 // We assume that this cut selects 50% of the signal (rough estimation, this needs to be estimated on simulation)
 // On run79.root, we estimate that the selection efficiency of this cut on LYSO background is 0.0033... (without this cut we have 800000 events in E[0]>>h histogram,
 // and with the cut we have 2666 events)
-double eff_signal = 0.85;
-double eff_lyso = 0.0034;
+// double eff_signal = 0.85;
+// double eff_lyso = 0.0034;
 
 // double eff_signal = 1;
 // double eff_lyso = 1;
@@ -70,7 +70,7 @@ Model::Model(RooRealVar* E, Data* lyso, RooAbsPdf* sig_gaussian) : m_E(E),
 								   m_LYSO(lyso)
 {
   m_lyso_yield = new RooRealVar("lyso_yield", "yield of lyso", 100000, 0, 1000000);
-  m_sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 1000000);
+  m_sig_yield = new RooRealVar("sig_yield", "yield signal peak", 1000, 0, 10000000);
   
   RooDataHist* hist_LYSO = lyso->GetDataHistFromTH1("hE_lyso", "dhE_lyso");
   RooHistPdf* histpdf_LYSO = new RooHistPdf("histpdf_LYSO","histpdf_LYSO", *m_E,*hist_LYSO,0);
@@ -259,7 +259,7 @@ std::pair<double, double> Result::CalcZ(TString fileName)
   WriteOTHFile(fileName.Data());
   OpTHyLiC oth(OTH::SystPolyexpo,OTH::StatLogN);
   oth.addChannel("ch1",fileName.Data());
-  const int Nexp=5e5;
+  const int Nexp=1e6;
   std::pair<double, double> s = oth.significance(OTH::SignifExpectedMed,Nexp);
 //    std::pair<double, double> s = oth.significance(OTH::SignifObserved,Nexp);
   const double p=s.first;
@@ -334,7 +334,7 @@ void SetGraphStyle(TGraph* g, int markerStyle, int markerSize, int color) {
 	g->SetMarkerColor(color);
 }
 
-TF1* Result::MakeFuncZvsActivity(int color, int style)
+TF1* Result::MakeFuncZvsActivity(int color, int style, double eff_signal, double eff_lyso)
 {
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Old stuff, could eventually be removed
@@ -354,7 +354,7 @@ TF1* Result::MakeFuncZvsActivity(int color, int style)
   // [4]: time
   // [5]: eff signal
   // [6]: eff background
-//   TF1* f = new TF1("f", "x/[3]*[0]*1/sqrt([1]*(1+[0]*[2]*(x/[3]-1))) * sqrt([4]) * [5]/sqrt([6])", 0, 1000);
+// TF1* f = new TF1("f", "x/[3]*[0]*1/sqrt([1]*(1+[0]*[2]*(x/[3]-1))) * sqrt([4]) * [5]/sqrt([6])", 0, 1000);
   // Cowan's formula
   TF1* f = new TF1("f", "sqrt(2*([4]/(1+[0]*[2]*(x/[3]-1))*([1]*[6] + x/[3]*[0]*[5])*TMath::Log(1+([5]*x/[3]*[0])/([6]*[1])) - [5]*x/[3]*[0]*[4]/(1+[0]*[2]*(x/[3]-1))))", 0, 2000);
   f->SetParameters(SigRate(), LysoRate(), m_deadTime, m_activity, m_time*60., eff_signal, eff_lyso);
@@ -364,25 +364,27 @@ TF1* Result::MakeFuncZvsActivity(int color, int style)
   return f;
 }
 
-TGraph* GetOTHTGraphAroundAlpha(Result* res, double alpha, int color, Model* model, Data* data, bool removeFirstPoint = false)
+TGraph* GetOTHTGraphAroundAlpha(int idxTime, Result* res, double alpha, int color, Model* model, Data* data, double eff_signal, double eff_lyso, bool removeFirstPoint = false)
 { 
 
   TGraph* g = new TGraph(4);
   for(int i=0; i < 4; i++) {
    Result* resClone = res->Clone();
    double factor;
+   
    if(i==0) factor = 1/2.;
    else if(i==1) factor = 1/1.5;
    else if(i==2) factor = 1/1.1;
    else if(i==3) factor = 1.4;
    else if(i==4) factor = 1.4;
+   
    resClone->RescaleActivity(alpha*factor);
    
    resClone->Print();
 //    TCanvas* cc = new TCanvas();
 //   model->Plot(data, resClone);
    resClone->ApplyEff(eff_signal, eff_lyso);
-   std::pair<double, double> zs = resClone->CalcZ("OTHinput/inputYield.dat");
+   std::pair<double, double> zs = resClone->CalcZ(Form("OTHinput/inputYield_%d_%d.dat", idxTime, i));
    resClone->Print();
    cout << "z(anal) = " << zs.first << " ; z(oth) = " << zs.second << endl;
    g->SetPoint(i, res->m_activity*alpha*factor, zs.second);
@@ -394,55 +396,112 @@ TGraph* GetOTHTGraphAroundAlpha(Result* res, double alpha, int color, Model* mod
   return g;
 }
 
-void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
+void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, double eff_lyso)
 {
   gPad->SetGridx(1);
   gPad->SetGridy(1);
   
+  std::vector<TGraph*> graphs;
+  std::vector<TF1*> funcs;
+  
+  std::vector<std::pair<int, int> > styles; // first element of pair: color, second element of pair: style
+  styles.push_back(make_pair(kBlack, 9));
+  styles.push_back(make_pair(kRed, 7));
+  styles.push_back(make_pair(kGreen+2, 2));
+  styles.push_back(make_pair(kBlue, 10));
+  styles.push_back(make_pair(kMagenta, 10));
+  
+  std::vector<double> rescalingFactors;
+  rescalingFactors.push_back(1.);
+  rescalingFactors.push_back(1/3.);
+  rescalingFactors.push_back(1/3.);
+  rescalingFactors.push_back(1/2.5);
+  rescalingFactors.push_back(1/2.);
+  
+  std::vector<double> vals;
+  vals.push_back(40);
+  vals.push_back(80);
+  vals.push_back(160);
+  vals.push_back(300);
+  vals.push_back(490);
+  
+  std::vector<double> times;
+  
+  for(int i=0; i<5; i++) {
+	cout << "--------------------" << endl;
+	cout << "RescaleTime " << i << endl;
+	
+	res->RescaleTime(rescalingFactors[i]); res->Print();
+	double time = res->m_time;
+	times.push_back(time);
+	cout << "time=" << times.back() << endl;
+	TF1* f = res->MakeFuncZvsActivity(styles[i].first, styles[i].second, eff_signal, eff_lyso);
+	bool removeFirstPoint=false;
+	if(i==4) removeFirstPoint=true;
+	TGraph* g = GetOTHTGraphAroundAlpha(i, res, vals[i]/14400., styles[i].first, model, data, eff_signal, eff_lyso, removeFirstPoint);
+	graphs.push_back(g);
+	funcs.push_back(f);
+  }
+  /*
   // raw
+  cout << "--------------------" << endl;
+  cout << "RAW" << endl;
   double time1 = res->m_time;
-  TF1* f1 = res->MakeFuncZvsActivity(kBlack, 9);
+  TF1* f1 = res->MakeFuncZvsActivity(kBlack, 9, eff_signal, eff_lyso);
   f1->GetYaxis()->SetRangeUser(0, 5);
   
   
-  TGraph* g1 = GetOTHTGraphAroundAlpha(res, 35/14400., kBlack, model, data);
+  TGraph* g1 = GetOTHTGraphAroundAlpha(res, 40/14400., kBlack, model, data, eff_signal, eff_lyso);
   
-  // rescale
+  // rescale  
+  cout << "--------------------" << endl;
+  cout << "RescaleTime 1" << endl;
   res->RescaleTime(1/3.); res->Print();
   double time2 = res->m_time;
-  TF1* f2 = res->MakeFuncZvsActivity(kRed, 7);
+  TF1* f2 = res->MakeFuncZvsActivity(kRed, 7, eff_signal, eff_lyso);
   
-   TGraph* g2 = GetOTHTGraphAroundAlpha(res, 67/14400., kRed, model, data);
+   TGraph* g2 = GetOTHTGraphAroundAlpha(res, 80/14400., kRed, model, data, eff_signal, eff_lyso);
   
   // rescale
+  cout << "--------------------" << endl;
+  cout << "RescaleTime 2" << endl;
   res->RescaleTime(1/3.); res->Print();
   double time3 = res->m_time;
-  TF1* f3 = res->MakeFuncZvsActivity(kGreen+2, 2);
+  TF1* f3 = res->MakeFuncZvsActivity(kGreen+2, 2, eff_signal, eff_lyso);
   
-   TGraph* g3 = GetOTHTGraphAroundAlpha(res, 130/14400., kGreen+2, model, data);
+   TGraph* g3 = GetOTHTGraphAroundAlpha(res, 160/14400., kGreen+2, model, data, eff_signal, eff_lyso);
   
   // rescale
+  cout << "--------------------" << endl;
+  cout << "RescaleTime 3" << endl;
   res->RescaleTime(1/3.); res->Print();
   double time4 = res->m_time;
-  TF1* f4 = res->MakeFuncZvsActivity(kBlue, 10);
+  TF1* f4 = res->MakeFuncZvsActivity(kBlue, 10, eff_signal, eff_lyso);
   
-   TGraph* g4 = GetOTHTGraphAroundAlpha(res, 260/14400., kBlue, model, data);
+   TGraph* g4 = GetOTHTGraphAroundAlpha(res, 290/14400., kBlue, model, data, eff_signal, eff_lyso);
  
     // rescale
+  cout << "--------------------" << endl;
+  cout << "RescaleTime 4" << endl;
   res->RescaleTime(1/2.); res->Print();
   double time5 = res->m_time;
-  TF1* f5 = res->MakeFuncZvsActivity(kMagenta, 10);
+  TF1* f5 = res->MakeFuncZvsActivity(kMagenta, 10, eff_signal, eff_lyso);
   
-   TGraph* g5 = GetOTHTGraphAroundAlpha(res, 400/14400., kMagenta, model, data, true);
+   TGraph* g5 = GetOTHTGraphAroundAlpha(res, 480/14400., kMagenta, model, data, eff_signal, eff_lyso);
  
    
-  TMultiGraph* g = new TMultiGraph();
   g->Add(g1);
   g->Add(g2);
   g->Add(g3);
   g->Add(g4);
   g->Add(g5);
+  */
   
+  
+  TMultiGraph* g = new TMultiGraph();
+  for(int i=0; i<5; i++) {
+	g->Add(graphs[i]);
+  }
   g->Draw("apl");
  	g->GetXaxis()->SetTitleSize(0.05);
 	g->GetYaxis()->SetTitleSize(0.05);
@@ -453,30 +512,58 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data)
   g->GetXaxis()->SetTitle("activity [Bq]");
   g->GetYaxis()->SetTitle("significance (expected median)");
   g->GetYaxis()->SetRangeUser(0.5,4.2);
-  g->GetXaxis()->SetRangeUser(0.,600);
+  g->GetXaxis()->SetRangeUser(0.,720);
   TLatex l;
   l.SetTextColor(kBlack);
   l.SetTextSize(0.045);
     PutText(0.55, 0.31, kBlack, "LAPD");
   PutText(0.55, 0.31-0.071, kBlack, "^{22}Na source at (0,0,0)");
   double x, y;
-  g1->GetPoint(0, x, y); l.DrawLatex(x, y-0.3, Form("time = %.1f min", time1));
-  g2->GetPoint(0, x, y); l.SetTextColor(kRed); l.DrawLatex(x+10, y-0.05, Form("time = %.1f min", time2));
-  g3->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+10, y-0.1, Form("time = %.1f min", time3));
-  g4->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+20, y, Form("time = %.1f sec", time4*60));
-  g5->GetPoint(0, x, y); l.SetTextColor(kMagenta); l.DrawLatex(x+40, y, Form("time = %.1f sec", time5*60));
+  graphs[0]->GetPoint(0, x, y); l.DrawLatex(x, y-0.3, Form("time = %.1f min", times[0]));
+  graphs[1]->GetPoint(0, x, y); l.SetTextColor(kRed); l.DrawLatex(x+5, y-0.2, Form("time = %.1f min", times[1]));
+  graphs[2]->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+12, y-0.05, Form("time = %.1f min", times[2]));
+  graphs[3]->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+15, y-0.1, Form("time = %.1f sec", times[3]*60));
+  graphs[4]->GetPoint(0, x, y); l.SetTextColor(kMagenta); l.DrawLatex(x+20, y-0.1, Form("time = %.1f sec", times[4]*60));
   
-//   f1->Draw("same");
-//   f2->Draw("same");
-//   f3->Draw("same");
-//   f4->Draw("same");
-//   f5->Draw("same");
+//   for(int i=0; i<5; i++) {
+// 	funcs[i]->Draw("same");
+//   }
   
   
   // draw 3 sigma line
-  TLine* line3sigmas = new TLine(0, 3, 590, 3);
+  TLine* line3sigmas = new TLine(0, 3, 720, 3);
   line3sigmas->SetLineWidth(3);
   line3sigmas->Draw("same");
+}
+
+std::pair<double, double> ComputeEfficienciesInSignalRegion(Data* dataNa22PlusLYSO, Data* dataLYSO, Result* res)
+{
+	TCut signalRegion("NoPulses == 2 && E[0] > 425 && E[0] < 595 && E[1] > 425 && E[1] < 595 && fabs(T30[0] - T30[1]) < 3.6");
+	
+	// LYSO
+	int nLYSO_init = dataLYSO->m_tree->GetEntries();
+	int nLYSO_afterCut = dataLYSO->m_tree->GetEntries(signalRegion);
+	cout << nLYSO_init << "  "  << nLYSO_afterCut << endl;
+	double effLYSO = nLYSO_afterCut/float(nLYSO_init);
+	
+	// Signal
+	// The efficiency for the signal is given by the following calculations:
+	// nNa22PlusLYSO_init = Ns + Nb
+	// nNa22PlusLYSO_afterCut = eff_signal*Ns + eff_lyso*Nb
+	//  => eff_signal = (nNa22PlusLYSO_afterCut - eff_lyso*Nb)/Ns
+	// where Nb and Ns are given by the fit whose result is stored in res
+	int nNa22PlusLYSO_init = dataNa22PlusLYSO->m_tree->GetEntries(dataNa22PlusLYSO->m_cut);
+	int nNa22PlusLYSO_afterCut = dataNa22PlusLYSO->m_tree->GetEntries(dataNa22PlusLYSO->m_cut && signalRegion);
+	cout << nNa22PlusLYSO_init << "  "  << nNa22PlusLYSO_afterCut << endl;
+	
+	double Nb = res->m_Nlyso;
+	double Ns = res->m_Nsig;
+	cout << "Nb, Ns=" << Nb << "  " << Ns << endl;
+	
+	double effSignal = (nNa22PlusLYSO_afterCut - effLYSO*Nb)/Ns;
+	cout << effSignal << endl;
+	
+	return make_pair(effSignal, effLYSO);
 }
 
 void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
@@ -540,15 +627,27 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   Model* model = new Model(E, dataLYSO, sig_gaussian);
   Result* res = model->Fit(data);
   res->Print();
+  
   TCanvas* c1 = new TCanvas("c1", "c1");
   model->Plot(data, res);
  c1->SaveAs("FitLYSOPlusSig_c1.png");
   
+     
+  cout << "--------------------------------------" << endl;
+  cout << "Computing efficiencies" << endl;
+  std::pair<double, double> effs = ComputeEfficienciesInSignalRegion(data, dataLYSO, res);
+  cout << effs.first << "  " << effs.second << endl;
+  
+  double eff_signal = effs.first;
+  double eff_lyso = effs.second;
+ 
 //   double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
   
+ 
   TCanvas* c2 = new TCanvas("c2", "c2");
-  MakeZVsAlphaPlot(res, model, data);
+  MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
   c2->SaveAs("FitLYSOPlusSig_c2.png");
+  
   
 }
 
