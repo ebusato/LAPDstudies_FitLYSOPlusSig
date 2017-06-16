@@ -208,11 +208,11 @@ void Result::Print()
 	cout << "  -> Nsig = " << m_Nsig << endl;
 	cout << "  -> Nlyso = " << m_Nlyso << " +- " << m_NlysoErr << endl;
 	cout << "  -> NlysoOrig = " << m_NlysoOrig << endl;
-	double rateSig = m_Nsig / m_time / 60.;
-	double rateLyso = m_Nlyso / m_time / 60.;
-	cout << "  -> rate sig = " << rateSig << endl;
-	cout << "  -> rate lyso = " << rateLyso << endl;
-	cout << "  -> rate tot = " << rateSig+rateLyso << endl; 
+	//double rateSig = m_Nsig / m_time / 60.;
+	//double rateLyso = m_Nlyso / m_time / 60.;
+	cout << "  -> rate sig = " << SigRate() << endl;
+	cout << "  -> rate lyso = " << LysoRate() << endl;
+	cout << "  -> rate tot = " << SigRate()+LysoRate() << endl; 
 }
 
 double Result::SolveForAlpha(double Z) 
@@ -626,13 +626,59 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   Model* model = new Model(E, dataLYSO, sig_gaussian);
   Result* res = model->Fit(data);
+  cout << "HERE HERE" << endl;
   res->Print();
   
   TCanvas* c1 = new TCanvas("c1", "c1");
   model->Plot(data, res);
  c1->SaveAs("FitLYSOPlusSig_c1.png");
   
-     
+ TCanvas* c10 = new TCanvas("c10", "c10");
+ c10->SetGridx(1);
+ c10->SetGridy(1);
+ TF1* fSigRateVsAlpha = new TF1("fSigRateVsAlpha", "x*[0]/(1+[0]*[1]*(x-1))",0,10);
+ fSigRateVsAlpha->SetParameters(res->SigRate(), res->m_deadTime);
+ TF1* fBkgRateVsAlpha = new TF1("fBkgRateVsAlpha", "[2]/(1+[0]*[1]*(x-1))",0,10);
+ fBkgRateVsAlpha->SetParameters(res->SigRate(), res->m_deadTime, res->LysoRate());
+ fSigRateVsAlpha->SetLineColor(kRed);
+ fBkgRateVsAlpha->SetLineColor(kGreen+2);
+ TF1* fSum = new TF1("fSum", "x*[0]/(1+[0]*[1]*(x-1)) + [2]/(1+[0]*[1]*(x-1))", 0, 10);
+ fSum->SetParameters(res->SigRate(), res->m_deadTime, res->LysoRate());
+ fSum->SetLineColor(kBlack);
+
+ fSum->GetXaxis()->SetTitleSize(0.05);
+ fSum->GetYaxis()->SetTitleSize(0.05);
+ fSum->GetXaxis()->SetTitleOffset(1.25);
+ fSum->GetYaxis()->SetTitleOffset(1.2);
+ fSum->GetXaxis()->SetLabelSize(0.05);
+ fSum->GetYaxis()->SetLabelSize(0.05);
+ fSum->GetYaxis()->SetRangeUser(0,30);
+ fSum->GetXaxis()->SetTitle("#alpha");
+ fSum->GetYaxis()->SetTitle("Measured rates [Hz]");
+
+ fSum->SetLineWidth(4);
+ fSigRateVsAlpha->SetLineWidth(3);
+ fSigRateVsAlpha->SetLineStyle(9);
+ fBkgRateVsAlpha->SetLineWidth(3);
+ fBkgRateVsAlpha->SetLineStyle(2);
+
+ fSum->Draw();
+ fSigRateVsAlpha->Draw("same");
+ fBkgRateVsAlpha->Draw("same");
+
+ PutText(0.2, 0.81, kBlack, "LAPD");
+ PutText(0.2, 0.75, kBlack, "^{22}Na source");
+
+  TLegend* leg = new TLegend(0.6,0.35,0.88,0.55);
+  leg->SetBorderSize(1);
+  leg->SetTextSize(0.04);	
+  leg->AddEntry(fSum, "Total rate", "l");
+  leg->AddEntry(fSigRateVsAlpha, "Signal rate", "l");
+  leg->AddEntry(fBkgRateVsAlpha, "Background rate", "l");
+  leg->Draw();
+  c10->SaveAs("FitLYSOPlusSig_c10.png");
+
+ /*
   cout << "--------------------------------------" << endl;
   cout << "Computing efficiencies" << endl;
   std::pair<double, double> effs = ComputeEfficienciesInSignalRegion(data, dataLYSO, res);
@@ -647,7 +693,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   TCanvas* c2 = new TCanvas("c2", "c2");
   MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
   c2->SaveAs("FitLYSOPlusSig_c2.png");
-  
+ */
   
 }
 
