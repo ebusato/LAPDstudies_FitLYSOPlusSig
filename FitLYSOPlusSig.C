@@ -259,7 +259,7 @@ std::pair<double, double> Result::CalcZ(TString fileName)
   WriteOTHFile(fileName.Data());
   OpTHyLiC oth(OTH::SystPolyexpo,OTH::StatLogN);
   oth.addChannel("ch1",fileName.Data());
-  const int Nexp=1e6;
+  const int Nexp=1e5;
   std::pair<double, double> s = oth.significance(OTH::SignifExpectedMed,Nexp);
 //    std::pair<double, double> s = oth.significance(OTH::SignifObserved,Nexp);
   const double p=s.first;
@@ -364,6 +364,30 @@ TF1* Result::MakeFuncZvsActivity(int color, int style, double eff_signal, double
   return f;
 }
 
+TF1* Result::MakeFuncSignifTheo(TString name, int color, int style, double eff_signal, double eff_lyso, double time)
+{
+  double max=700.;
+  if(time >60)
+    max=300.;
+  if(time > 60*8)
+    max=80.;
+  TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(1-ROOT::Math::poisson_cdf_c([1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6] + x/[4]*[2]/(1+[2]*[3]*(x/[4] - 1))*[5]*[7],[1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6]), [0])", 0, max);
+  // [0] -> with of normal distribution used for quantile calculation
+  // [1] -> mb_0
+  // [2] -> ms_0
+  // [3] -> dead time
+  // [4] -> initial activity
+  // [5] -> acquisition time
+  // [6] -> eff lyso
+  // [7] -> eff sig
+  f->SetParameters(1, m_NlysoOrig/(m_timeOrig*60), m_NsigOrig/(m_timeOrig*60), m_deadTime, m_activityOrig, time, eff_lyso, eff_signal);
+  f->SetLineColor(color);
+  f->SetLineStyle(style);
+  f->SetNpx(1e4);
+  return f;
+}
+
+
 TGraph* GetOTHTGraphAroundAlpha(int idxTime, Result* res, double alpha, int color, Model* model, Data* data, double eff_signal, double eff_lyso, bool removeFirstPoint = false)
 { 
 
@@ -435,80 +459,28 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
 	double time = res->m_time;
 	times.push_back(time);
 	cout << "time=" << times.back() << endl;
-	TF1* f = res->MakeFuncZvsActivity(styles[i].first, styles[i].second, eff_signal, eff_lyso);
+	//TF1* f = res->MakeFuncZvsActivity(styles[i].first, styles[i].second, eff_signal, eff_lyso);
+	TString name("f");
+	name+=i;
+	TF1* f = res->MakeFuncSignifTheo(name, styles[i].first, 9, eff_signal, eff_lyso, time*60);
 	bool removeFirstPoint=false;
 	if(i==4) removeFirstPoint=true;
 	TGraph* g = GetOTHTGraphAroundAlpha(i, res, vals[i]/14400., styles[i].first, model, data, eff_signal, eff_lyso, removeFirstPoint);
 	graphs.push_back(g);
 	funcs.push_back(f);
   }
-  /*
-  // raw
-  cout << "--------------------" << endl;
-  cout << "RAW" << endl;
-  double time1 = res->m_time;
-  TF1* f1 = res->MakeFuncZvsActivity(kBlack, 9, eff_signal, eff_lyso);
-  f1->GetYaxis()->SetRangeUser(0, 5);
-  
-  
-  TGraph* g1 = GetOTHTGraphAroundAlpha(res, 40/14400., kBlack, model, data, eff_signal, eff_lyso);
-  
-  // rescale  
-  cout << "--------------------" << endl;
-  cout << "RescaleTime 1" << endl;
-  res->RescaleTime(1/3.); res->Print();
-  double time2 = res->m_time;
-  TF1* f2 = res->MakeFuncZvsActivity(kRed, 7, eff_signal, eff_lyso);
-  
-   TGraph* g2 = GetOTHTGraphAroundAlpha(res, 80/14400., kRed, model, data, eff_signal, eff_lyso);
-  
-  // rescale
-  cout << "--------------------" << endl;
-  cout << "RescaleTime 2" << endl;
-  res->RescaleTime(1/3.); res->Print();
-  double time3 = res->m_time;
-  TF1* f3 = res->MakeFuncZvsActivity(kGreen+2, 2, eff_signal, eff_lyso);
-  
-   TGraph* g3 = GetOTHTGraphAroundAlpha(res, 160/14400., kGreen+2, model, data, eff_signal, eff_lyso);
-  
-  // rescale
-  cout << "--------------------" << endl;
-  cout << "RescaleTime 3" << endl;
-  res->RescaleTime(1/3.); res->Print();
-  double time4 = res->m_time;
-  TF1* f4 = res->MakeFuncZvsActivity(kBlue, 10, eff_signal, eff_lyso);
-  
-   TGraph* g4 = GetOTHTGraphAroundAlpha(res, 290/14400., kBlue, model, data, eff_signal, eff_lyso);
- 
-    // rescale
-  cout << "--------------------" << endl;
-  cout << "RescaleTime 4" << endl;
-  res->RescaleTime(1/2.); res->Print();
-  double time5 = res->m_time;
-  TF1* f5 = res->MakeFuncZvsActivity(kMagenta, 10, eff_signal, eff_lyso);
-  
-   TGraph* g5 = GetOTHTGraphAroundAlpha(res, 480/14400., kMagenta, model, data, eff_signal, eff_lyso);
- 
-   
-  g->Add(g1);
-  g->Add(g2);
-  g->Add(g3);
-  g->Add(g4);
-  g->Add(g5);
-  */
-  
   
   TMultiGraph* g = new TMultiGraph();
   for(int i=0; i<5; i++) {
-	g->Add(graphs[i]);
+    g->Add(graphs[i]);
   }
   g->Draw("apl");
- 	g->GetXaxis()->SetTitleSize(0.05);
-	g->GetYaxis()->SetTitleSize(0.05);
-	g->GetXaxis()->SetTitleOffset(1.25);
-	g->GetYaxis()->SetTitleOffset(1.2);
-	g->GetXaxis()->SetLabelSize(0.05);
-	g->GetYaxis()->SetLabelSize(0.05);
+  g->GetXaxis()->SetTitleSize(0.05);
+  g->GetYaxis()->SetTitleSize(0.05);
+  g->GetXaxis()->SetTitleOffset(1.25);
+  g->GetYaxis()->SetTitleOffset(1.2);
+  g->GetXaxis()->SetLabelSize(0.05);
+  g->GetYaxis()->SetLabelSize(0.05);
   g->GetXaxis()->SetTitle("activity [Bq]");
   g->GetYaxis()->SetTitle("significance (expected median)");
   g->GetYaxis()->SetRangeUser(0.5,4.2);
@@ -525,9 +497,9 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
   graphs[3]->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+15, y-0.1, Form("time = %.1f sec", times[3]*60));
   graphs[4]->GetPoint(0, x, y); l.SetTextColor(kMagenta); l.DrawLatex(x+20, y-0.1, Form("time = %.1f sec", times[4]*60));
   
-//   for(int i=0; i<5; i++) {
-// 	funcs[i]->Draw("same");
-//   }
+   for(int i=0; i<5; i++) {
+ 	funcs[i]->Draw("same");
+   }
   
   
   // draw 3 sigma line
@@ -678,7 +650,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   leg->Draw();
   c10->SaveAs("FitLYSOPlusSig_c10.png");
 
- /*
+ 
   cout << "--------------------------------------" << endl;
   cout << "Computing efficiencies" << endl;
   std::pair<double, double> effs = ComputeEfficienciesInSignalRegion(data, dataLYSO, res);
@@ -689,11 +661,10 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
  
 //   double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
   
- 
+  
   TCanvas* c2 = new TCanvas("c2", "c2");
   MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
   c2->SaveAs("FitLYSOPlusSig_c2.png");
- */
   
 }
 
