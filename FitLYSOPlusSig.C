@@ -577,7 +577,7 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
    double x, y;
    graphs[0]->GetPoint(0, x, y); l.DrawLatex(x, y-0.7, Form("time = %.1f min", times[0]));
    graphs[1]->GetPoint(0, x, y); l.SetTextColor(kRed); l.DrawLatex(x+7, y-0.5, Form("time = %.1f min", times[1]));
-   graphs[2]->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+15, y-0.2, Form("time = %.1f min", times[2]));
+   graphs[2]->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+25, y-0.2, Form("time = %.1f min", times[2]));
    graphs[3]->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+60, y-0.2, Form("time = %.1f sec", times[3]*60));
    graphs[4]->GetPoint(0, x, y); l.SetTextColor(kMagenta); l.DrawLatex(x+70, y-0.2, Form("time = %.1f sec", times[4]*60));
 }
