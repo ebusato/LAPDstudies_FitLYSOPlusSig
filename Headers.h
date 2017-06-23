@@ -27,7 +27,8 @@ public:
 	void Restore();
 	std::pair<TGraph*, TGraph*> MakeGraphAroundAlpha(double alpha);
 	TF1* MakeFuncZvsActivity(int color, int style, double eff_signal, double eff_lyso);
-	TF1* MakeFuncSignifTheo(TString name, int color, int style, double eff_signal, double eff_lyso, double time);
+	TF1* MakeFuncSignifTheoFromPoisson(TString name, int color, int style, double eff_signal, double eff_lyso, double time);
+	TF1* MakeFuncSignifTheoFromGamma(TString name, int color, int style, double eff_signal, double eff_lyso, double time);
 
 	void Print();
 	
