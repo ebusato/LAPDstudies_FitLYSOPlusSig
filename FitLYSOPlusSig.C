@@ -391,7 +391,6 @@ TF1* Result::MakeFuncSignifTheoFromPoisson(TString name, int color, int style, d
   return f;
 }
 
-
 TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, double eff_signal, double eff_lyso, double time)
 {
   double max=700.;
@@ -399,6 +398,7 @@ TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, dou
     max=300.;
   if(time > 60*8)
     max=80.;
+  
 
   TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(ROOT::Math::gamma_cdf_c([1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6],[1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6] + x/[4]*[2]/(1+[2]*[3]*(x/[4] - 1))*[5]*[7], 1), [0])", 0, max);
 
@@ -413,7 +413,8 @@ TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, dou
   f->SetParameters(1, m_NlysoOrig/(m_timeOrig*60), m_NsigOrig/(m_timeOrig*60), m_deadTime, m_activityOrig, time, eff_lyso, eff_signal);
   f->SetLineColor(color);
   f->SetLineStyle(style);
-  f->SetNpx(1e4);
+  f->SetLineWidth(2);
+  //f->SetNpx(1e4);
   return f;
 }
 
@@ -504,14 +505,13 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
 	funcs2.push_back(f2);
   }
   
-  /*
   
+  /*
   TMultiGraph* g = new TMultiGraph();
   for(int i=0; i<5; i++) {
     g->Add(graphs[i]);
   }
-  //g->Draw("apl");
-  g->Draw("a");
+  g->Draw("apl");
   g->GetXaxis()->SetTitleSize(0.05);
   g->GetYaxis()->SetTitleSize(0.05);
   g->GetXaxis()->SetTitleOffset(1.25);
@@ -524,50 +524,62 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
   g->GetXaxis()->SetRangeUser(0.,720);
   */
 
+     // draw 3 sigma line
+  //TLine* line3sigmas = new TLine(0, 3, 700, 3);
+  TF1* line3sigmas = new TF1("line3sigmas","3",0, 720);
+   line3sigmas->SetLineWidth(3);
+   line3sigmas->SetLineColor(kBlack);
+  line3sigmas->GetXaxis()->SetTitleSize(0.05);
+  line3sigmas->GetYaxis()->SetTitleSize(0.05);
+  line3sigmas->GetXaxis()->SetTitleOffset(1.25);
+  line3sigmas->GetYaxis()->SetTitleOffset(1.2);
+  line3sigmas->GetXaxis()->SetLabelSize(0.05);
+  line3sigmas->GetYaxis()->SetLabelSize(0.05);
+  line3sigmas->GetXaxis()->SetTitle("activity [Bq]");
+  line3sigmas->GetYaxis()->SetTitle("significance (expected average)");
+  line3sigmas->GetYaxis()->SetRangeUser(0.5,4.2);
+  line3sigmas->GetXaxis()->SetRangeUser(0.,720);
+   line3sigmas->Draw();
+
   
-  
-  funcs2[4]->GetXaxis()->SetTitleSize(0.05);
-  funcs2[4]->GetYaxis()->SetTitleSize(0.05);
-  funcs2[4]->GetXaxis()->SetTitleOffset(1.25);
-  funcs2[4]->GetYaxis()->SetTitleOffset(1.2);
-  funcs2[4]->GetXaxis()->SetLabelSize(0.05);
-  funcs2[4]->GetYaxis()->SetLabelSize(0.05);
-  funcs2[4]->GetXaxis()->SetTitle("activity [Bq]");
-  funcs2[4]->GetYaxis()->SetTitle("significance (expected average)");
-  funcs2[4]->GetYaxis()->SetRangeUser(0.5,4.2);
-  funcs2[4]->GetXaxis()->SetRangeUser(0.,720);
   
    for(int i=0; i<5; i++) {
      //funcs[i]->Draw("same");
-
-   }
-
-   for(int i=4; i>=0; i--) {
-     if(i==4) {
-       funcs2[i]->Draw();
+     double min=100;
+     double max=700.;
+     if(i==0) {
+       min=0; max=80.;
      }
+     if(i==1) {
+       min=30; max=200.;
+     }
+     if(i==2) {
+       min=80; max=300.;
+     }
+     if(i==3) {
+       min=180; max=500.;
+     }
+     if(i==4) {
+       min=350; max=800.;
+     }
+
+     if(i==0)
+       funcs2[i]->DrawF1(min, max, "same");
      else
- 	funcs2[i]->Draw("same");
+       funcs2[i]->DrawF1(min, max, "same");
    }
 
-  TLatex l;
-  l.SetTextColor(kBlack);
-  l.SetTextSize(0.045);
-    PutText(0.55, 0.31, kBlack, "LAPD");
-  PutText(0.55, 0.31-0.071, kBlack, "^{22}Na source at (0,0,0)");
-  double x, y;
-  graphs[0]->GetPoint(0, x, y); l.DrawLatex(x, y-0.3, Form("time = %.1f min", times[0]));
-  graphs[1]->GetPoint(0, x, y); l.SetTextColor(kRed); l.DrawLatex(x+5, y-0.2, Form("time = %.1f min", times[1]));
-  graphs[2]->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+12, y-0.05, Form("time = %.1f min", times[2]));
-  graphs[3]->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+15, y-0.1, Form("time = %.1f sec", times[3]*60));
-  graphs[4]->GetPoint(0, x, y); l.SetTextColor(kMagenta); l.DrawLatex(x+20, y-0.1, Form("time = %.1f sec", times[4]*60));
-
-  
-  
-  // draw 3 sigma line
-  TLine* line3sigmas = new TLine(0, 3, 700, 3);
-  line3sigmas->SetLineWidth(3);
-  line3sigmas->Draw("same");
+   TLatex l;
+   l.SetTextColor(kBlack);
+   l.SetTextSize(0.045);
+   PutText(0.55, 0.31, kBlack, "LAPD");
+   PutText(0.55, 0.31-0.071, kBlack, "^{22}Na source at (0,0,0)");
+   double x, y;
+   graphs[0]->GetPoint(0, x, y); l.DrawLatex(x, y-0.7, Form("time = %.1f min", times[0]));
+   graphs[1]->GetPoint(0, x, y); l.SetTextColor(kRed); l.DrawLatex(x+7, y-0.5, Form("time = %.1f min", times[1]));
+   graphs[2]->GetPoint(0, x, y); l.SetTextColor(kGreen+2); l.DrawLatex(x+15, y-0.2, Form("time = %.1f min", times[2]));
+   graphs[3]->GetPoint(0, x, y); l.SetTextColor(kBlue); l.DrawLatex(x+60, y-0.2, Form("time = %.1f sec", times[3]*60));
+   graphs[4]->GetPoint(0, x, y); l.SetTextColor(kMagenta); l.DrawLatex(x+70, y-0.2, Form("time = %.1f sec", times[4]*60));
 }
 
 std::pair<double, double> ComputeEfficienciesInSignalRegion(Data* dataNa22PlusLYSO, Data* dataLYSO, Result* res)
