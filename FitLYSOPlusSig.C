@@ -400,7 +400,7 @@ TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, dou
     max=80.;
   
 
-  TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(ROOT::Math::gamma_cdf_c([1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6],[1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6] + x/[4]*[2]/(1+[2]*[3]*(x/[4] - 1))*[5]*[7], 1), [0])", 0, max);
+  TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(1-ROOT::Math::gamma_cdf([1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6],[1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6] + x/[4]*[2]/(1+[2]*[3]*(x/[4] - 1))*[5]*[7], 1), [0])", 0, max);
 
   // [0] -> with of normal distribution used for quantile calculation
   // [1] -> mb_0
@@ -700,7 +700,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
  fSum->GetYaxis()->SetLabelSize(0.05);
  fSum->GetYaxis()->SetRangeUser(0,30);
  fSum->GetXaxis()->SetTitle("#alpha");
- fSum->GetYaxis()->SetTitle("Measured rates [Hz]");
+ fSum->GetYaxis()->SetTitle("Expected measured rates [Hz]");
 
  fSum->SetLineWidth(4);
  fSigRateVsAlpha->SetLineWidth(3);
