@@ -99,7 +99,7 @@ Result* Model::Fit(Data* data)
 
 
   m_sig_yield->setConstant();
- m_model->fitTo(*(data->m_dh), Extended(),Range("range_650_Max"), PrintEvalErrors(-1));
+  m_model->fitTo(*(data->m_dh), Extended(),Range("range_650_Max"), PrintEvalErrors(-1));
 
 //  m_model->fitTo(*(data->m_dh), Extended(),Range("range_700_Max"), PrintEvalErrors(-1));
 
@@ -644,6 +644,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   dataLYSO->m_cut = "";
   data->m_cut = "Evt < 15000 && Sat[0] == 0";
+  //data->m_cut = "Evt < 1600 && Sat[0] == 0";
   
   RooAbsPdf* sig_gaussian;
   if(na22FromSimu) {
@@ -735,11 +736,11 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
  
 //   double alpha = res->SolveForAlpha(3*sqrt(eff_lyso)/eff_signal);
   
-  
+  /*
   TCanvas* c2 = new TCanvas("c2", "c2");
   MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
   c2->SaveAs("FitLYSOPlusSig_c2.png");
-  
+  */
 }
 
 void FitLYSOPlusSig()
