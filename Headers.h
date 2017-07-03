@@ -24,6 +24,7 @@ public:
 	std::pair<double, double> CalcZ(TString fileName);
 	void RescaleActivity(double factor);
 	void RescaleTime(double factor);
+	void SetTime(double time);
 	void Restore();
 	std::pair<TGraph*, TGraph*> MakeGraphAroundAlpha(double alpha);
 	TF1* MakeFuncZvsActivity(int color, int style, double eff_signal, double eff_lyso);
