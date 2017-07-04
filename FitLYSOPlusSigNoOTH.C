@@ -51,7 +51,7 @@ RooDataHist* Data::GetDataHistFromTH1(string TH1Name, string histName)
   return m_dh;
 }
 
-// returns run duration in minutes
+// returns run duration in seconds
 double Data::RunDuration()
 {
   m_tree->Draw(">>evtlist", m_cut);
@@ -62,7 +62,7 @@ double Data::RunDuration()
   double timeEnd = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
   m_tree->GetEntry(0);
   double timeBeg = m_tree->GetLeaf("TimeStamp")->GetValue()*1/64e6;
-  return (timeEnd - timeBeg)/60.;
+  return timeEnd - timeBeg;
 }
 
 
@@ -177,31 +177,15 @@ void Result::Print()
 {
 	cout << "Printing result: "<< endl;
 	cout << "  -> Activity = " << m_activity << endl;
-	cout << "  -> Time = " << m_time*60 << " sec" << endl;
+	cout << "  -> Time = " << m_time << " sec" << endl;
 	cout << "  -> Nsig = " << m_Nsig << endl;
 	cout << "  -> Nlyso = " << m_Nlyso << " +- " << m_NlysoErr << endl;
 	cout << "  -> NlysoOrig = " << m_NlysoOrig << endl;
-	//double rateSig = m_Nsig / m_time / 60.;
-	//double rateLyso = m_Nlyso / m_time / 60.;
+	//double rateSig = m_Nsig / m_time;
+	//double rateLyso = m_Nlyso / m_time;
 	cout << "  -> rate sig = " << SigRate() << endl;
 	cout << "  -> rate lyso = " << LysoRate() << endl;
 	cout << "  -> rate tot = " << SigRate()+LysoRate() << endl; 
-}
-
-double Result::SolveForAlpha(double Z) 
-{  
-  double mSig = SigRate();
-  double poly_a = m_Nsig*m_Nsig;
-  double poly_b = -1*Z*Z*m_Nlyso*mSig*m_deadTime;
-  double poly_c = Z*Z*m_Nlyso*(mSig*m_deadTime - 1);
-  double delta = poly_b*poly_b - 4*poly_a*poly_c;
-  cout << "delta = " << delta << endl;
-  double solplus = (-poly_b + sqrt(delta))/(2*poly_a);
-  double solminus = (-poly_b - sqrt(delta))/(2*poly_a);
-  cout << "sol+ = " << solplus << endl;
-  cout << "sol- = " << solminus << endl;
-  
-  return solplus;
 }
 
 void Result::ApplyEff(double effSig, double effLyso)
@@ -210,18 +194,35 @@ void Result::ApplyEff(double effSig, double effLyso)
   m_Nlyso *= effLyso;
 }
 
+// time is in seconds
+void Result::PrintYields(double activity, double time) {
+  double mLYSOOrig = m_NlysoOrig/m_timeOrig;
+  double mSigOrig = m_NsigOrig/m_timeOrig;
+
+  double mLYSOprime = mLYSOOrig / (1+mSigOrig*m_deadTime*(activity/m_activityOrig-1));
+  double mSigprime = activity/m_activityOrig*mSigOrig / (1+mSigOrig*m_deadTime*(activity/m_activityOrig-1));
+
+  cout << "PrintYields result: " << endl;
+  cout << "  -> activity=" << activity << endl;
+  cout << "  -> time=" << time << endl;
+  cout << "  -> mLYSOprime=" << mLYSOprime << endl;
+  cout << "  -> mSigprime=" << mSigprime << endl;
+  cout << "  -> NLYSOprime=" << mLYSOprime*time << endl;
+  cout << "  -> NSigprime=" << mSigprime*time << endl;
+}
+
 void Result::RescaleActivity(double factor) {
   // compute rates in sec-1
-  double mLYSO = m_Nlyso / m_time / 60.;
-  double mSig = m_Nsig / m_time / 60.;
+  double mLYSO = m_Nlyso / m_time;
+  double mSig = m_Nsig / m_time;
   
   // compute rescaled quantities
   double mLYSOprime = mLYSO / (1+mSig*m_deadTime*(factor-1));
   double mSigprime = factor*mSig / (1+mSig*m_deadTime*(factor-1));
   
   m_activity = m_activity * factor;
-  m_Nlyso = mLYSOprime*m_time*60;
-  m_Nsig = mSigprime*m_time*60;
+  m_Nlyso = mLYSOprime*m_time;
+  m_Nsig = mSigprime*m_time;
 }
 
 void Result::RescaleTime(double factor) {
@@ -230,7 +231,7 @@ void Result::RescaleTime(double factor) {
   m_time = m_time * factor;
 }
 
-void Result::SetTime(double time) { // time is in minutes
+void Result::SetTime(double time) {
   double factor = time/m_time;
   RescaleTime(factor);
 }
@@ -252,9 +253,20 @@ void SetGraphStyle(TGraph* g, int markerStyle, int markerSize, int color) {
 
 TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, double eff_signal, double eff_lyso, double time)
 {
-  double max=3000.;
+  double max=10000.;
+  if(time > 4)
+    max=3000.;
+  if(time > 10)
+    //max=500.;
+    max=1000.;
+  if(time >50)
+    //max=250.;
+    max=400.;
+  if(time > 60*8)
+    //max=63.; 
+    max=80;
 
-  TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(1-ROOT::Math::gamma_cdf([1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6],[1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6] + x/[4]*[2]/(1+[2]*[3]*(x/[4] - 1))*[5]*[7], 1), [0])", 0, max);
+  TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(1-ROOT::Math::gamma_cdf([1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6],[1]/(1+[2]*[3]*(x/[4] - 1))*[5]*[6] + x/[4]*[2]/(1+[2]*[3]*(x/[4] - 1))*[5]*[7], 1), [0])", 1, max);
 
   // [0] -> with of normal distribution used for quantile calculation
   // [1] -> mb_0
@@ -264,12 +276,28 @@ TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, dou
   // [5] -> acquisition time
   // [6] -> eff lyso
   // [7] -> eff sig
-  f->SetParameters(1, m_NlysoOrig/(m_timeOrig*60), m_NsigOrig/(m_timeOrig*60), m_deadTime, m_activityOrig, time, eff_lyso, eff_signal);
+  f->SetParameters(1, m_NlysoOrig/m_timeOrig, m_NsigOrig/m_timeOrig, m_deadTime, m_activityOrig, time, eff_lyso, eff_signal);
   f->SetLineColor(color);
   f->SetLineStyle(style);
-  f->SetLineWidth(2);
+  //f->SetLineWidth(3);
   //f->SetNpx(1e4);
   return f;
+}
+
+double FindDetectionLimit(TF1* f) 
+{
+  double a=1.;
+  double Z = f->Eval(a);
+  while(fabs(Z-3) > 0.001) {
+    if(Z < 3) {
+      a*=1.2;
+    } else {
+      a/=1.1;
+    }
+    Z = f->Eval(a);
+    //cout << "Testing a=" << a << " -> Z=" << Z << endl;
+  }
+  return a;
 }
 
 void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, double eff_lyso)
@@ -287,11 +315,11 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
   styles.push_back(make_pair(kMagenta, 10));
   
   std::vector<double> Times;
-  Times.push_back(10.9);
-  Times.push_back(3);
-  Times.push_back(1);
-  Times.push_back(10/60.);
-  Times.push_back(2/60.);
+  Times.push_back(res->m_time);
+  Times.push_back(1*60);
+  Times.push_back(20.);
+  Times.push_back(5.);
+  Times.push_back(1.);
   
   std::vector<double> times;
   
@@ -305,16 +333,22 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
 	cout << "time=" << times.back() << endl;
 	TString name("f");
 	name+=i;
-	TF1* f = res->MakeFuncSignifTheoFromGamma(name, styles[i].first, 1, eff_signal, eff_lyso, time*60);
+	TF1* f = res->MakeFuncSignifTheoFromGamma(name, styles[i].first, 1, eff_signal, eff_lyso, time);
 	funcs.push_back(f);
+
+	double a0 = FindDetectionLimit(funcs[i]);
+	cout << " Detection limit = " << a0 << endl;
+	res->PrintYields(a0, Times[i]);
+
+
   }
   
   
      // draw 3 sigma line
   //TLine* line3sigmas = new TLine(0, 3, 700, 3);
-  TF1* line3sigmas = new TF1("line3sigmas","3",0, 3000);
-   line3sigmas->SetLineWidth(3);
-   line3sigmas->SetLineColor(kBlack);
+  TF1* line3sigmas = new TF1("line3sigmas","3",10, 8000);
+  line3sigmas->SetLineWidth(3);
+  line3sigmas->SetLineColor(kBlack);
   line3sigmas->GetXaxis()->SetTitleSize(0.05);
   line3sigmas->GetYaxis()->SetTitleSize(0.05);
   line3sigmas->GetXaxis()->SetTitleOffset(1.25);
@@ -324,48 +358,24 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
   line3sigmas->GetXaxis()->SetTitle("activity [Bq]");
   line3sigmas->GetYaxis()->SetTitle("significance (expected average)");
   line3sigmas->GetYaxis()->SetRangeUser(0.5,4.2);
-  line3sigmas->GetXaxis()->SetRangeUser(0.,3000);
+  line3sigmas->GetXaxis()->SetRangeUser(30,8000);
    line3sigmas->Draw();
 
-  
-  
    for(int i=0; i<5; i++) {
-     //funcs[i]->Draw("same");
-     double min=100;
-     double max=7000.;
-     /*
-     if(i==0) {
-       min=0; max=80.;
-     }
-     if(i==1) {
-       min=30; max=200.;
-     }
-     if(i==2) {
-       min=80; max=300.;
-     }
-     if(i==3) {
-       min=180; max=500.;
-     }
-     if(i==4) {
-       min=350; max=7000.;
-       }*/
-
-     
-     //funcs[i]->DrawF1(min, max, "same");
      funcs[i]->Draw("same");
    }
+
    TLatex l;
    l.SetTextColor(kBlack);
    l.SetTextSize(0.045);
-   PutText(0.55, 0.31, kBlack, "LAPD");
-   PutText(0.55, 0.31-0.071, kBlack, "^{22}Na source at (0,0,0)");
-   double x=400;
-   double y=2;
-   l.DrawLatex(x, y, Form("time = %.1f min", times[0]));
-   l.SetTextColor(kRed); l.DrawLatex(x+7, y-0.2, Form("time = %.1f min", times[1]));
-   l.SetTextColor(kGreen+2); l.DrawLatex(x+25, y-0.4, Form("time = %.1f min", times[2]));
-   l.SetTextColor(kBlue); l.DrawLatex(x+60, y-0.6, Form("time = %.1f sec", times[3]*60));
-   l.SetTextColor(kMagenta); l.DrawLatex(x+70, y-0.8, Form("time = %.1f sec", times[4]*60));
+   PutText(0.2, 0.81, kBlack, "LAPD");
+   PutText(0.2, 0.81-0.071, kBlack, "^{22}Na source at (0,0,0)");
+   l.SetTextAngle(50); 
+   l.DrawLatex(24, 1.5, Form("%.1f min", times[0]/60.));
+   l.SetTextColor(kRed); l.DrawLatex(93, 1.5, Form("%.1f min", times[1]/60.));
+   l.SetTextColor(kGreen+2); l.DrawLatex(180, 1.5, Form("%.1f sec", times[2]));
+   l.SetTextColor(kBlue); l.DrawLatex(455, 1.5, Form("%.1f sec", times[3]));
+   l.SetTextColor(kMagenta); l.DrawLatex(1500, 1.5, Form("%.1f sec", times[4]));
 }
 
 std::pair<double, double> ComputeEfficienciesInSignalRegion(Data* dataNa22PlusLYSO, Data* dataLYSO, Result* res)
@@ -524,7 +534,9 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   
   TCanvas* c2 = new TCanvas("c2", "c2");
+  //c2->SetLogx();
   MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
+  c2->SetLogx();
   c2->SaveAs("FitLYSOPlusSig_c2.png");
 }
 
