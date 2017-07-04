@@ -291,7 +291,7 @@ TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, dou
 }
 
 
-TF1* Result::MakeFuncSignifTheoFromGammaFromTrueRates(TString name, int color, int style, double eff_signal, double eff_lyso, double time)
+TF1* Result::MakeFuncSignifTheoFromGammaFromTrueRates(TString name, int color, int style, double eff_signal, double eff_lyso, double time, double deadtime)
 {
   double max=10000.;
   if(time > 4)
@@ -316,7 +316,15 @@ TF1* Result::MakeFuncSignifTheoFromGammaFromTrueRates(TString name, int color, i
   // [5] -> acquisition time
   // [6] -> eff lyso
   // [7] -> eff sig
-  f->SetParameters(1, BkgTrueRateOrig(), SigTrueRate0Orig(), m_deadTime, m_activityOrig, time, eff_lyso, eff_signal);
+
+  double deadT = 0;
+  if(deadtime==-1) {
+    deadT = m_deadTime;
+  } else {
+    deadT = deadtime;
+  }
+
+  f->SetParameters(1, BkgTrueRateOrig(), SigTrueRate0Orig(), deadT, m_activityOrig, time, eff_lyso, eff_signal);
   f->SetLineColor(color);
   f->SetLineStyle(style);
   f->GetXaxis()->SetTitleSize(0.05);
@@ -514,6 +522,8 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   gPad->SetGridy(1);
   
   std::vector<TF1*> funcs;
+  std::vector<TF1*> funcsdT1;
+  std::vector<TF1*> funcsdT2;
 
   std::vector<std::pair<int, int> > styles; // first element of pair: color, second element of pair: style
   styles.push_back(make_pair(kBlack, 9));
@@ -540,6 +550,9 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
 	name+=i;
 	TF1* f = res->MakeFuncSignifTheoFromGammaFromTrueRates(name, styles[i].first, 1, eff_signal, eff_lyso, Times[i]);
 	funcs.push_back(f);
+
+	TF1* f1 = res->MakeFuncSignifTheoFromGammaFromTrueRates(name, styles[i].first, 1, eff_signal, eff_lyso, Times[i]);
+	funcsdT1.push_back(f1);
 
 	double a0 = FindDetectionLimit(funcs[i]);
 	cout << " Detection limit = " << a0 << endl;
@@ -583,7 +596,23 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   for(int i=0; i<Times.size(); i++) {
     g->SetPoint(i, Times[i], detectionLimits[i]);
   }
-  g->Draw("ap");
+  
+  g->Draw("apl");
+  gPad->SetGridx();
+  gPad->SetGridy();
+  gPad->SetLogy();
+  gPad->SetLogx();
+  g->GetYaxis()->SetTitle("Detection limit [Bq]");
+  g->GetXaxis()->SetTitle("Time [s]");
+  g->GetXaxis()->SetTitleSize(0.05);
+  g->GetYaxis()->SetTitleSize(0.05);
+  g->GetXaxis()->SetTitleOffset(1.25);
+  g->GetYaxis()->SetTitleOffset(1.4);
+  g->GetXaxis()->SetLabelSize(0.05);
+  g->GetYaxis()->SetLabelSize(0.05);
+  g->GetXaxis()->SetRangeUser(0.5, 2000);
+  g->GetYaxis()->SetRangeUser(10, 5000);
+  gPad->Update();
 }
 
 void FitLYSOPlusSigNoOTH()
