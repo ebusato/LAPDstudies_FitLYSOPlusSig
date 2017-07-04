@@ -144,7 +144,7 @@ void Model::Plot(Data* data, Result* res, bool plotData)
   PutText(xText, 0.81-1*yShift, kBlack, "^{22}Na (14.4 kBq)");
   stringstream ss;
   ss.precision(3);
-  ss << "Run duration: " << res->m_time << " min";
+  ss << "Run duration: " << res->m_time << " sec";
   PutText(xText, 0.81-2*yShift, kBlack, ss.str().c_str());
   
   TLegend* leg = new TLegend(0.6,0.42,0.75,0.62);
@@ -306,6 +306,30 @@ TF1* Result::MakeFuncSignifTheoFromGammaFromTrueRates(TString name, int color, i
     //max=63.; 
     max=80;
 
+  if(deadtime != -1 && deadtime < 0.04115/2.) {
+    max=2000;
+    if(time > 4)
+      max=1000.;
+    if(time > 10)
+      max=500.;
+    if(time >50)
+      max=100.;
+    if(time > 60*8)
+      max=63.; 
+  }
+
+  if(deadtime != -1 && deadtime < 0.04115/20.) {
+    max=2000;
+    if(time > 4)
+      max=600.;
+    if(time > 10)
+      max=200.;
+    if(time >50)
+      max=100.;
+    if(time > 60*8)
+      max=40.; 
+  }
+
   TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(1-ROOT::Math::gamma_cdf([1]/(1+[3]*([1] + [2]*x/[4]))*[5]*[6],[1]/(1+[3]*([1] + [2]*x/[4]))*[5]*[6] + x/[4]*[2]/(1+[3]*([1] + [2]*x/[4]))*[5]*[7], 1), [0])", 1, max);
 
   // [0] -> with of normal distribution used for quantile calculation
@@ -417,7 +441,7 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   dataLYSO->m_cut = "";
   data->m_cut = "Evt < 15000 && Sat[0] == 0";
-  //data->m_cut = "Evt < 1600 && Sat[0] == 0";
+  //data->m_cut = "Evt < 30 && Sat[0] == 0";
   
   RooAbsPdf* sig_gaussian;
   if(na22FromSimu) {
@@ -539,7 +563,9 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   Times.push_back(5.);
   Times.push_back(1.);
   
-  std::vector<double> detectionLimits;
+  std::vector<double> detectionLimits0;
+  std::vector<double> detectionLimits1;
+  std::vector<double> detectionLimits2;
 
   for(int i=0; i<5; i++) {
 	cout << "--------------------" << endl;
@@ -551,17 +577,32 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
 	TF1* f = res->MakeFuncSignifTheoFromGammaFromTrueRates(name, styles[i].first, 1, eff_signal, eff_lyso, Times[i]);
 	funcs.push_back(f);
 
-	TF1* f1 = res->MakeFuncSignifTheoFromGammaFromTrueRates(name, styles[i].first, 1, eff_signal, eff_lyso, Times[i]);
+	TF1* f1 = res->MakeFuncSignifTheoFromGammaFromTrueRates(name, styles[i].first, 9, eff_signal, eff_lyso, Times[i], 0.04115/5.);
 	funcsdT1.push_back(f1);
 
+	TF1* f2 = res->MakeFuncSignifTheoFromGammaFromTrueRates(name, styles[i].first, 2, eff_signal, eff_lyso, Times[i], 0.04115/40.);
+	funcsdT2.push_back(f2);
+
 	double a0 = FindDetectionLimit(funcs[i]);
-	cout << " Detection limit = " << a0 << endl;
+	cout << " Detection limit a0 = " << a0 << endl;
 	res->PrintYields(a0, Times[i]);
-	detectionLimits.push_back(a0);
+	detectionLimits0.push_back(a0);
+
+	double a1 = FindDetectionLimit(funcsdT1[i]);
+	cout << " Detection limit a1 = " << a1 << endl;
+	res->PrintYields(a1, Times[i]);
+	detectionLimits1.push_back(a1);
+
+	double a2 = FindDetectionLimit(funcsdT2[i]);
+	cout << " Detection limit a2 = " << a2 << endl;
+	res->PrintYields(a2, Times[i]);
+	detectionLimits2.push_back(a2);
   }
   
   for(int i=0; i<5; i++) {
     funcs[i]->Draw("same");
+    //funcsdT1[i]->Draw("same");
+    //funcsdT2[i]->Draw("same");
   }
   
   TLatex l;
@@ -592,27 +633,77 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   c2->SaveAs("FitLYSOPlusSig_c2.png");
 
   TCanvas* c3 = new TCanvas("c3", "c3");
-  TGraph* g = new TGraph(Times.size());
+  TGraph* g0 = new TGraph(Times.size());
+  TGraph* g1 = new TGraph(Times.size());
+  TGraph* g2 = new TGraph(Times.size());
   for(int i=0; i<Times.size(); i++) {
-    g->SetPoint(i, Times[i], detectionLimits[i]);
+    g0->SetPoint(i, Times[i], detectionLimits0[i]);
+    g1->SetPoint(i, Times[i], detectionLimits1[i]);
+    g2->SetPoint(i, Times[i], detectionLimits2[i]);
   }
-  
-  g->Draw("apl");
+
+  /*
+  TF1* lineGhost = new TF1("lineGhost","100",10, 1000);
+  lineGhost->Draw();
+  */
+
   gPad->SetGridx();
   gPad->SetGridy();
   gPad->SetLogy();
   gPad->SetLogx();
-  g->GetYaxis()->SetTitle("Detection limit [Bq]");
-  g->GetXaxis()->SetTitle("Time [s]");
-  g->GetXaxis()->SetTitleSize(0.05);
-  g->GetYaxis()->SetTitleSize(0.05);
-  g->GetXaxis()->SetTitleOffset(1.25);
-  g->GetYaxis()->SetTitleOffset(1.4);
-  g->GetXaxis()->SetLabelSize(0.05);
-  g->GetYaxis()->SetLabelSize(0.05);
-  g->GetXaxis()->SetRangeUser(0.5, 2000);
-  g->GetYaxis()->SetRangeUser(10, 5000);
-  gPad->Update();
+  
+  g0->SetMaximum(10);
+  g0->SetMinimum(5000);
+  g1->SetMaximum(10);
+  g1->SetMinimum(5000);
+  g2->SetMaximum(10);
+  g2->SetMinimum(5000);
+
+  g1->SetLineStyle(7);
+  g2->SetLineStyle(3);
+  g0->SetLineColor(kRed);
+  g1->SetLineColor(kGreen+2);
+  g2->SetLineColor(kBlue);
+  g0->SetMarkerColor(kRed);
+  g1->SetMarkerColor(kGreen+2);
+  g2->SetMarkerColor(kBlue);
+
+  TMultiGraph* multi = new TMultiGraph();  
+  multi->Add(g0);
+  multi->Add(g1);
+  multi->Add(g2);
+  multi->Draw("apl");  
+  multi->GetYaxis()->SetTitle("Detection limit [Bq]");
+  multi->GetXaxis()->SetTitle("Time [s]");
+  multi->GetXaxis()->SetTitleSize(0.05);
+  multi->GetYaxis()->SetTitleSize(0.05);
+  multi->GetXaxis()->SetTitleOffset(1.25);
+  multi->GetYaxis()->SetTitleOffset(1.4);
+  multi->GetXaxis()->SetLabelSize(0.05);
+  multi->GetYaxis()->SetLabelSize(0.05);
+  multi->GetXaxis()->SetRangeUser(1, 4000);
+  //multi->GetYaxis()->SetRangeUser(10, 5000);
+  
+
+  //g0->Draw("apl");
+  //g1->Draw("pl");
+  //g2->Draw("pl");
+
+  PutText(0.57, 0.81, kBlack, "LAPD");
+  PutText(0.57, 0.81-0.071, kBlack, "^{22}Na source at (0,0,0)");
+  TLegend* legg = new TLegend(0.2,0.22,0.55,0.42);
+  legg->SetBorderSize(1);
+  legg->SetTextSize(0.04);
+  legg->AddEntry(g0, "dead time = 41 ms", "lp");
+  legg->AddEntry(g1, "dead time = 8.2 ms", "lp");
+  legg->AddEntry(g2, "dead time = 1.03 ms", "lp");
+  legg->Draw();
+
+  //TF1* fFitGraph = new TF1("fFitGraph", "[1]/TMath::Power(x, [0])", 0.5, 700);
+  //fFitGraph->FixParameter(0, 1);
+  //g->Fit(fFitGraph);
+
+  c3->SaveAs("FitLYSOPlusSig_c3.png");
 }
 
 void FitLYSOPlusSigNoOTH()
