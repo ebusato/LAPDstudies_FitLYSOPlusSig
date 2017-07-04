@@ -279,6 +279,12 @@ TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, dou
   f->SetParameters(1, m_NlysoOrig/m_timeOrig, m_NsigOrig/m_timeOrig, m_deadTime, m_activityOrig, time, eff_lyso, eff_signal);
   f->SetLineColor(color);
   f->SetLineStyle(style);
+  f->GetXaxis()->SetTitleSize(0.05);
+  f->GetYaxis()->SetTitleSize(0.05);
+  f->GetXaxis()->SetTitleOffset(1.25);
+  f->GetYaxis()->SetTitleOffset(1.2);
+  f->GetXaxis()->SetLabelSize(0.05);
+  f->GetYaxis()->SetLabelSize(0.05);
   //f->SetLineWidth(3);
   //f->SetNpx(1e4);
   return f;
@@ -343,24 +349,6 @@ void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, 
 
   }
   
-  
-     // draw 3 sigma line
-  //TLine* line3sigmas = new TLine(0, 3, 700, 3);
-  TF1* line3sigmas = new TF1("line3sigmas","3",10, 8000);
-  line3sigmas->SetLineWidth(3);
-  line3sigmas->SetLineColor(kBlack);
-  line3sigmas->GetXaxis()->SetTitleSize(0.05);
-  line3sigmas->GetYaxis()->SetTitleSize(0.05);
-  line3sigmas->GetXaxis()->SetTitleOffset(1.25);
-  line3sigmas->GetYaxis()->SetTitleOffset(1.2);
-  line3sigmas->GetXaxis()->SetLabelSize(0.05);
-  line3sigmas->GetYaxis()->SetLabelSize(0.05);
-  line3sigmas->GetXaxis()->SetTitle("activity [Bq]");
-  line3sigmas->GetYaxis()->SetTitle("significance (expected average)");
-  line3sigmas->GetYaxis()->SetRangeUser(0.5,4.2);
-  line3sigmas->GetXaxis()->SetRangeUser(30,8000);
-   line3sigmas->Draw();
-
    for(int i=0; i<5; i++) {
      funcs[i]->Draw("same");
    }
@@ -534,9 +522,26 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   
   
   TCanvas* c2 = new TCanvas("c2", "c2");
-  //c2->SetLogx();
-  MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
+  // draw 3 sigma line
+  TF1* line3sigmas = new TF1("line3sigmas","3",10, 10000);
+  line3sigmas->Draw();
+
   c2->SetLogx();
+  MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
+
+  //  line3sigmas->GetYaxis()->SetRangeUser(0.5,4.2);
+  line3sigmas->GetXaxis()->SetRangeUser(10,8000);
+  line3sigmas->SetLineWidth(3);
+  line3sigmas->SetLineColor(kBlack);
+  line3sigmas->GetXaxis()->SetTitle("activity [Bq]");
+  line3sigmas->GetYaxis()->SetTitle("significance (expected average)");
+  line3sigmas->GetXaxis()->SetTitleSize(0.05);
+  line3sigmas->GetYaxis()->SetTitleSize(0.05);
+  line3sigmas->GetXaxis()->SetTitleOffset(1.25);
+  line3sigmas->GetYaxis()->SetTitleOffset(1.2);
+  line3sigmas->GetXaxis()->SetLabelSize(0.05);
+  line3sigmas->GetYaxis()->SetLabelSize(0.05);
+  c2->Update();
   c2->SaveAs("FitLYSOPlusSig_c2.png");
 }
 
