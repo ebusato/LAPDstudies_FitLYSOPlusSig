@@ -29,14 +29,17 @@ public:
 	void Restore();
 	std::pair<TGraph*, TGraph*> MakeGraphAroundAlpha(double alpha);
 	TF1* MakeFuncZvsActivity(int color, int style, double eff_signal, double eff_lyso);
-	TF1* MakeFuncSignifTheoFromPoisson(TString name, int color, int style, double eff_signal, double eff_lyso, double time);
 	TF1* MakeFuncSignifTheoFromGamma(TString name, int color, int style, double eff_signal, double eff_lyso, double time);
+	TF1* MakeFuncSignifTheoFromGammaFromTrueRates(TString name, int color, int style, double eff_signal, double eff_lyso, double time);
 
 	void Print();
 	
 	double SigRate() {return m_Nsig/m_time;}
 	double LysoRate() {return m_Nlyso/m_time;}
 	
+	double BkgTrueRateOrig() {return m_NlysoOrig/m_timeOrig/(1-(m_NsigOrig/m_timeOrig+m_NlysoOrig/m_timeOrig)*m_deadTime);}
+	double SigTrueRate0Orig() {return m_NsigOrig/m_timeOrig/(1-(m_NsigOrig/m_timeOrig+m_NlysoOrig/m_timeOrig)*m_deadTime);}
+
 	Result* Clone();
 	
 	double m_time;

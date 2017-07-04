@@ -290,6 +290,47 @@ TF1* Result::MakeFuncSignifTheoFromGamma(TString name, int color, int style, dou
   return f;
 }
 
+
+TF1* Result::MakeFuncSignifTheoFromGammaFromTrueRates(TString name, int color, int style, double eff_signal, double eff_lyso, double time)
+{
+  double max=10000.;
+  if(time > 4)
+    max=3000.;
+  if(time > 10)
+    //max=500.;
+    max=1000.;
+  if(time >50)
+    //max=250.;
+    max=400.;
+  if(time > 60*8)
+    //max=63.; 
+    max=80;
+
+  TF1* f = new TF1(name.Data(), "ROOT::Math::normal_quantile(1-ROOT::Math::gamma_cdf([1]/(1+[3]*([1] + [2]*x/[4]))*[5]*[6],[1]/(1+[3]*([1] + [2]*x/[4]))*[5]*[6] + x/[4]*[2]/(1+[3]*([1] + [2]*x/[4]))*[5]*[7], 1), [0])", 1, max);
+
+  // [0] -> with of normal distribution used for quantile calculation
+  // [1] -> rb
+  // [2] -> rs_0
+  // [3] -> dead time
+  // [4] -> initial activity
+  // [5] -> acquisition time
+  // [6] -> eff lyso
+  // [7] -> eff sig
+  f->SetParameters(1, BkgTrueRateOrig(), SigTrueRate0Orig(), m_deadTime, m_activityOrig, time, eff_lyso, eff_signal);
+  f->SetLineColor(color);
+  f->SetLineStyle(style);
+  f->GetXaxis()->SetTitleSize(0.05);
+  f->GetYaxis()->SetTitleSize(0.05);
+  f->GetXaxis()->SetTitleOffset(1.25);
+  f->GetYaxis()->SetTitleOffset(1.2);
+  f->GetXaxis()->SetLabelSize(0.05);
+  f->GetYaxis()->SetLabelSize(0.05);
+  //f->SetLineWidth(3);
+  //f->SetNpx(1e4);
+  return f;
+}
+
+
 double FindDetectionLimit(TF1* f) 
 {
   double a=1.;
@@ -304,66 +345,6 @@ double FindDetectionLimit(TF1* f)
     //cout << "Testing a=" << a << " -> Z=" << Z << endl;
   }
   return a;
-}
-
-void MakeZVsAlphaPlot(Result* res, Model* model, Data* data, double eff_signal, double eff_lyso)
-{
-  gPad->SetGridx(1);
-  gPad->SetGridy(1);
-  
-  std::vector<TF1*> funcs;
-
-  std::vector<std::pair<int, int> > styles; // first element of pair: color, second element of pair: style
-  styles.push_back(make_pair(kBlack, 9));
-  styles.push_back(make_pair(kRed, 7));
-  styles.push_back(make_pair(kGreen+2, 2));
-  styles.push_back(make_pair(kBlue, 10));
-  styles.push_back(make_pair(kMagenta, 10));
-  
-  std::vector<double> Times;
-  Times.push_back(res->m_time);
-  Times.push_back(1*60);
-  Times.push_back(20.);
-  Times.push_back(5.);
-  Times.push_back(1.);
-  
-  std::vector<double> times;
-  
-  for(int i=0; i<5; i++) {
-	cout << "--------------------" << endl;
-	cout << "RescaleTime " << i << endl;
-	
-	res->SetTime(Times[i]); res->Print();
-	double time = res->m_time;
-	times.push_back(time);
-	cout << "time=" << times.back() << endl;
-	TString name("f");
-	name+=i;
-	TF1* f = res->MakeFuncSignifTheoFromGamma(name, styles[i].first, 1, eff_signal, eff_lyso, time);
-	funcs.push_back(f);
-
-	double a0 = FindDetectionLimit(funcs[i]);
-	cout << " Detection limit = " << a0 << endl;
-	res->PrintYields(a0, Times[i]);
-
-
-  }
-  
-   for(int i=0; i<5; i++) {
-     funcs[i]->Draw("same");
-   }
-
-   TLatex l;
-   l.SetTextColor(kBlack);
-   l.SetTextSize(0.045);
-   PutText(0.2, 0.81, kBlack, "LAPD");
-   PutText(0.2, 0.81-0.071, kBlack, "^{22}Na source at (0,0,0)");
-   l.SetTextAngle(50); 
-   l.DrawLatex(24, 1.5, Form("%.1f min", times[0]/60.));
-   l.SetTextColor(kRed); l.DrawLatex(93, 1.5, Form("%.1f min", times[1]/60.));
-   l.SetTextColor(kGreen+2); l.DrawLatex(180, 1.5, Form("%.1f sec", times[2]));
-   l.SetTextColor(kBlue); l.DrawLatex(455, 1.5, Form("%.1f sec", times[3]));
-   l.SetTextColor(kMagenta); l.DrawLatex(1500, 1.5, Form("%.1f sec", times[4]));
 }
 
 std::pair<double, double> ComputeEfficienciesInSignalRegion(Data* dataNa22PlusLYSO, Data* dataLYSO, Result* res)
@@ -527,8 +508,61 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   line3sigmas->Draw();
 
   c2->SetLogx();
-  MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
+  //std::vector<double> detectionLimits = MakeZVsAlphaPlot(res, model, data, eff_signal, eff_lyso);
 
+  gPad->SetGridx(1);
+  gPad->SetGridy(1);
+  
+  std::vector<TF1*> funcs;
+
+  std::vector<std::pair<int, int> > styles; // first element of pair: color, second element of pair: style
+  styles.push_back(make_pair(kBlack, 9));
+  styles.push_back(make_pair(kRed, 7));
+  styles.push_back(make_pair(kGreen+2, 2));
+  styles.push_back(make_pair(kBlue, 10));
+  styles.push_back(make_pair(kMagenta, 10));
+  
+  std::vector<double> Times;
+  Times.push_back(res->m_time);
+  Times.push_back(2*60);
+  Times.push_back(20.);
+  Times.push_back(5.);
+  Times.push_back(1.);
+  
+  std::vector<double> detectionLimits;
+
+  for(int i=0; i<5; i++) {
+	cout << "--------------------" << endl;
+	cout << "RescaleTime " << i << endl;
+	
+	res->SetTime(Times[i]); res->Print();
+	TString name("f");
+	name+=i;
+	TF1* f = res->MakeFuncSignifTheoFromGammaFromTrueRates(name, styles[i].first, 1, eff_signal, eff_lyso, Times[i]);
+	funcs.push_back(f);
+
+	double a0 = FindDetectionLimit(funcs[i]);
+	cout << " Detection limit = " << a0 << endl;
+	res->PrintYields(a0, Times[i]);
+	detectionLimits.push_back(a0);
+  }
+  
+  for(int i=0; i<5; i++) {
+    funcs[i]->Draw("same");
+  }
+  
+  TLatex l;
+  l.SetTextColor(kBlack);
+  l.SetTextSize(0.045);
+  PutText(0.2, 0.81, kBlack, "LAPD");
+  PutText(0.2, 0.81-0.071, kBlack, "^{22}Na source at (0,0,0)");
+  l.SetTextAngle(50); 
+  l.DrawLatex(24, 1.5, Form("%.1f min", Times[0]/60.));
+  l.SetTextColor(kRed); l.DrawLatex(60, 1.5, Form("%.1f min", Times[1]/60.));
+  l.SetTextColor(kGreen+2); l.DrawLatex(180, 1.5, Form("%.1f sec", Times[2]));
+  l.SetTextColor(kBlue); l.DrawLatex(455, 1.5, Form("%.1f sec", Times[3]));
+  l.SetTextColor(kMagenta); l.DrawLatex(1500, 1.5, Form("%.1f sec", Times[4]));
+  
   //  line3sigmas->GetYaxis()->SetRangeUser(0.5,4.2);
   line3sigmas->GetXaxis()->SetRangeUser(10,8000);
   line3sigmas->SetLineWidth(3);
@@ -543,6 +577,13 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   line3sigmas->GetYaxis()->SetLabelSize(0.05);
   c2->Update();
   c2->SaveAs("FitLYSOPlusSig_c2.png");
+
+  TCanvas* c3 = new TCanvas("c3", "c3");
+  TGraph* g = new TGraph(Times.size());
+  for(int i=0; i<Times.size(); i++) {
+    g->SetPoint(i, Times[i], detectionLimits[i]);
+  }
+  g->Draw("ap");
 }
 
 void FitLYSOPlusSigNoOTH()
