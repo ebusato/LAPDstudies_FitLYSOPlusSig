@@ -682,6 +682,8 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   multi->GetXaxis()->SetLabelSize(0.05);
   multi->GetYaxis()->SetLabelSize(0.05);
   multi->GetXaxis()->SetRangeUser(1, 4000);
+  //  multi->GetYaxis()->SetMoreLogLabels(1);
+
   //multi->GetYaxis()->SetRangeUser(10, 5000);
   
 
