@@ -621,8 +621,8 @@ void FitLYSOPlusSig(string dataFile, string lysoFile, bool na22FromSimu=false)
   line3sigmas->GetXaxis()->SetRangeUser(10,8000);
   line3sigmas->SetLineWidth(3);
   line3sigmas->SetLineColor(kBlack);
-  line3sigmas->GetXaxis()->SetTitle("activity [Bq]");
-  line3sigmas->GetYaxis()->SetTitle("significance (expected average)");
+  line3sigmas->GetXaxis()->SetTitle("Activity [Bq]");
+  line3sigmas->GetYaxis()->SetTitle("Significance (expected average)");
   line3sigmas->GetXaxis()->SetTitleSize(0.05);
   line3sigmas->GetYaxis()->SetTitleSize(0.05);
   line3sigmas->GetXaxis()->SetTitleOffset(1.25);
